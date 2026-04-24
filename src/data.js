@@ -2,8 +2,9 @@
 // 9팀, 47명 (재직/휴직/퇴사 모두 포함), 2026년 53주
 // -------------------------------------------------------
 
-// 팀 (엑셀 코드 그대로)
+// 팀 (엑셀 코드 + DC 본부)
 const TEAMS = [
+  { id: 'DC', name: 'DC', color: '#1E293B' },  // 본부 — 맨 위
   { id: 'DM', name: 'DM', color: '#6366F1' },
   { id: 'DF', name: 'DF', color: '#0EA5E9' },
   { id: 'DS', name: 'DS', color: '#10B981' },
@@ -15,8 +16,8 @@ const TEAMS = [
   { id: 'DX', name: 'DX', color: '#64748B' },
 ];
 
-// 등급 (엑셀 그대로)
-const LEVELS = ['특급', '고급', '중급', '초급'];
+// 등급 (엑셀 그대로 + 본부장)
+const LEVELS = ['본부장', '특급', '고급', '중급', '초급'];
 
 // 상태
 const STATUSES = {
@@ -28,8 +29,9 @@ const STATUSES = {
 
 // 인원 (엑셀 원본 — 관리자 포함 47명)
 const USERS = [
-  // DM 6명
-  { id: 'u001', name: '허순구', team: 'DM', level: '특급', status: 'active',   isManager: true,  note: '관리자' },
+  // DC 본부 (1명)
+  { id: 'u001', name: '허순구', team: 'DC', level: '본부장', status: 'active', isManager: true, note: '본부장' },
+  // DM 5명 (허순구 제외)
   { id: 'u002', name: '박혜주', team: 'DM', level: '고급', status: 'active' },
   { id: 'u003', name: '최철호', team: 'DM', level: '중급', status: 'active' },
   { id: 'u004', name: '남하영', team: 'DM', level: '초급', status: 'active' },
@@ -497,7 +499,7 @@ const KPI_TARGET = 0.85; // 85%
 const SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
 
 // 등급별 색상
-const LEVEL_COLORS = { '특급': '#8B5CF6', '고급': '#3B82F6', '중급': '#10B981', '초급': '#F59E0B' };
+const LEVEL_COLORS = { '본부장': '#1E293B', '특급': '#8B5CF6', '고급': '#3B82F6', '중급': '#10B981', '초급': '#F59E0B' };
 
 // Window expose
 window.APP_DATA = {

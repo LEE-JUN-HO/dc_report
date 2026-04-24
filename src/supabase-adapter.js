@@ -86,6 +86,32 @@
       await client.from('pipeline').delete().eq('id', id);
     };
 
+    // ===== 팀 CRUD =====
+    window.APP_DATA.saveTeam = async (t) => {
+      await client.from('teams').upsert({
+        id: t.id, name: t.name, color: t.color,
+        sort_order: t.sortOrder ?? 99,
+      });
+    };
+    window.APP_DATA.deleteTeam = async (id) => {
+      await client.from('teams').delete().eq('id', id);
+    };
+
+    // ===== 인원 CRUD =====
+    window.APP_DATA.saveUser = async (u) => {
+      await client.from('users').upsert({
+        id: u.id, name: u.name, team_id: u.team, level: u.level,
+        status: u.status, is_manager: u.isManager || false,
+        joined_at: u.joinedAt || null,
+        resigned_at: u.resignedAt || null,
+        note: u.note || null,
+      });
+    };
+    window.APP_DATA.deleteUser = async (id) => {
+      // utilization은 ON DELETE CASCADE로 자동 정리됨
+      await client.from('users').delete().eq('id', id);
+    };
+
     // 4. Realtime 구독 — 다른 사용자 변경 자동 반영
     client
       .channel('util-changes')

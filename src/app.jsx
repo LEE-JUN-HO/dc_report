@@ -14,6 +14,10 @@ function App() {
   const [overrideParams, setOverrideParams] = useState(null);
   const [pipelineModalOpen, setPipelineModalOpen] = useState(false);
   const [pipelineEditTarget, setPipelineEditTarget] = useState(null); // null이면 신규
+  const [teamModalOpen, setTeamModalOpen] = useState(false);
+  const [teamEditTarget, setTeamEditTarget] = useState(null);
+  const [userModalOpen, setUserModalOpen] = useState(false);
+  const [userEditTarget, setUserEditTarget] = useState(null);
   const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
   const [editModeOn, setEditModeOn] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
@@ -111,6 +115,74 @@ function App() {
   };
   const onPipelineDataChange = () => setDataVersion(v => v + 1);
 
+  // ===== 팀 CRUD =====
+  const openNewTeam = () => { setTeamEditTarget(null); setTeamModalOpen(true); };
+  const openEditTeam = (id) => {
+    const t = window.APP_DATA.TEAMS.find(x => x.id === id);
+    if (t) { setTeamEditTarget({ ...t }); setTeamModalOpen(true); }
+  };
+  const saveTeamEntry = async (t, isEdit) => {
+    const { TEAMS } = window.APP_DATA;
+    if (isEdit) {
+      const idx = TEAMS.findIndex(x => x.id === t.id);
+      if (idx >= 0) TEAMS[idx] = t;
+    } else {
+      if (TEAMS.some(x => x.id === t.id)) { alert('이미 존재하는 팀 코드입니다: ' + t.id); return; }
+      TEAMS.push(t);
+    }
+    if (window.APP_DATA.saveTeam) {
+      try { await window.APP_DATA.saveTeam(t); } catch (e) { console.error(e); alert('저장 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+  const deleteTeamEntry = async (id) => {
+    const { TEAMS, USERS } = window.APP_DATA;
+    const memberCount = USERS.filter(u => u.team === id).length;
+    if (memberCount > 0) {
+      alert(`이 팀에 ${memberCount}명의 인원이 있습니다. 먼저 인원을 다른 팀으로 이동하거나 삭제해주세요.`);
+      return;
+    }
+    const idx = TEAMS.findIndex(x => x.id === id);
+    if (idx >= 0) TEAMS.splice(idx, 1);
+    if (window.APP_DATA.deleteTeam) {
+      try { await window.APP_DATA.deleteTeam(id); } catch (e) { console.error(e); alert('삭제 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+
+  // ===== 인원 CRUD =====
+  const openNewUser = () => { setUserEditTarget(null); setUserModalOpen(true); };
+  const openEditUser = (id) => {
+    const u = window.APP_DATA.USERS.find(x => x.id === id);
+    if (u) { setUserEditTarget({ ...u }); setUserModalOpen(true); }
+  };
+  const saveUserEntry = async (u, isEdit) => {
+    const { USERS } = window.APP_DATA;
+    if (isEdit) {
+      const idx = USERS.findIndex(x => x.id === u.id);
+      if (idx >= 0) USERS[idx] = u;
+    } else {
+      if (USERS.some(x => x.id === u.id)) { alert('이미 존재하는 ID입니다: ' + u.id); return; }
+      USERS.push(u);
+    }
+    if (window.APP_DATA.saveUser) {
+      try { await window.APP_DATA.saveUser(u); } catch (e) { console.error(e); alert('저장 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+  const deleteUserEntry = async (id) => {
+    const { USERS, UTIL } = window.APP_DATA;
+    const idx = USERS.findIndex(x => x.id === id);
+    if (idx >= 0) USERS.splice(idx, 1);
+    // 로컬 UTIL도 정리 (Supabase는 CASCADE)
+    delete UTIL[id];
+    if (window.APP_DATA.deleteUser) {
+      try { await window.APP_DATA.deleteUser(id); } catch (e) { console.error(e); alert('삭제 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+  const onSettingsDataChange = () => setDataVersion(v => v + 1);
+
   const APP = window.APP_DATA || {};
   const pipelineCount = (APP.PIPELINE || []).length;
   const kpiTarget = APP.KPI_TARGET != null ? APP.KPI_TARGET : 0.85;
@@ -135,7 +207,7 @@ function App() {
           </div>
           <div className="topbar-spacer"></div>
           <div className="topbar-actions">
-            <a href="배포가이드.html" target="_blank" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
+            <a href="guide.html" target="_blank" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
               <Icon name="zap" size={13} /> Supabase 배포하기
             </a>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-sunken)' }}>
@@ -155,7 +227,17 @@ function App() {
               onEditProject={openEditProject}
               onDataChange={onPipelineDataChange}
             />}
-            {view === 'settings'    && <SettingsView />}
+            {view === 'settings'    && <SettingsView
+              onNewTeam={openNewTeam}
+              onEditTeam={openEditTeam}
+              onDeleteTeam={deleteTeamEntry}
+              onNewUser={openNewUser}
+              onEditUser={openEditUser}
+              onDeleteUser={deleteUserEntry}
+              onSaveUser={saveUserEntry}
+              onSaveTeam={saveTeamEntry}
+              onDataChange={onSettingsDataChange}
+            />}
             {view === 'user'    && detailParams && <UserDetail userId={detailParams.id} onBack={() => navigate('utilization')} onProjectClick={(id) => navigate('project', id)} />}
             {view === 'team'    && detailParams && <TeamDetail teamId={detailParams.id} onBack={() => navigate('dashboard')} onSelectUser={(id) => navigate('user', id)} />}
             {view === 'project' && detailParams && <ProjectDetail
@@ -180,6 +262,20 @@ function App() {
         onClose={() => setPipelineModalOpen(false)}
         onSave={savePipelineEntry}
         onDelete={deletePipelineEntry}
+      />
+      <TeamModal
+        open={teamModalOpen}
+        initialTeam={teamEditTarget}
+        onClose={() => setTeamModalOpen(false)}
+        onSave={saveTeamEntry}
+        onDelete={deleteTeamEntry}
+      />
+      <UserModal
+        open={userModalOpen}
+        initialUser={userEditTarget}
+        onClose={() => setUserModalOpen(false)}
+        onSave={saveUserEntry}
+        onDelete={deleteUserEntry}
       />
 
       {editModeOn && <TweaksPanel tweaks={tweaks} onChange={updateTweak} onClose={() => setEditModeOn(false)} />}

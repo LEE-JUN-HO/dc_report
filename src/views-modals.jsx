@@ -215,4 +215,175 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
   );
 }
 
-Object.assign(window, { OverrideModal, PipelineModal });
+// ===== 팀 신규/수정 모달 =====
+function TeamModal({ open, onClose, onSave, onDelete, initialTeam }) {
+  const isEdit = !!initialTeam;
+  const empty = { id: '', name: '', color: '#6366F1' };
+  const [form, setForm] = useStateM(empty);
+
+  React.useEffect(() => {
+    if (open) setForm(initialTeam ? { ...initialTeam } : empty);
+  }, [open, initialTeam?.id]);
+
+  const update = (k, v) => setForm({ ...form, [k]: v });
+  const save = () => {
+    if (!form.id || !form.name) return;
+    onSave({ ...form }, isEdit);
+    onClose();
+  };
+  const handleDelete = () => {
+    if (!confirm(`팀 "${form.name}"을 삭제하시겠습니까?\n소속 인원이 있으면 삭제되지 않습니다.`)) return;
+    onDelete(form.id);
+    onClose();
+  };
+
+  const COLORS = ['#6366F1','#0EA5E9','#10B981','#F59E0B','#8B5CF6','#EC4899','#14B8A6','#F97316','#64748B','#EF4444','#3B82F6','#84CC16'];
+
+  return (
+    <Modal
+      open={open} onClose={onClose} width={460}
+      title={isEdit ? `팀 수정 — ${initialTeam?.name}` : '신규 팀'}
+      footer={(
+        <>
+          {isEdit && <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleDelete}><Icon name="trash" size={13} /> 삭제</button>}
+          <div style={{ flex: 1 }}></div>
+          <button className="btn btn-sm" onClick={onClose}>취소</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={!form.id || !form.name}>
+            <Icon name="check" size={13} /> {isEdit ? '저장' : '추가'}
+          </button>
+        </>
+      )}
+    >
+      <div className="field">
+        <div className="field-label">팀 코드 (ID)</div>
+        <input className="input" value={form.id} onChange={e => update('id', e.target.value.toUpperCase().replace(/\s/g,''))} placeholder="예: DM, DF, DX" disabled={isEdit} maxLength={8} style={{ fontFamily: 'var(--font-mono)' }} />
+        <div className="field-hint">엑셀 코드와 동일하게 2~3글자 권장 · 저장 후 변경 불가</div>
+      </div>
+      <div className="field">
+        <div className="field-label">팀명</div>
+        <input className="input" value={form.name} onChange={e => update('name', e.target.value)} placeholder="예: DM (혹은 DM팀)" />
+      </div>
+      <div className="field">
+        <div className="field-label">색상</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {COLORS.map(c => (
+            <button key={c} onClick={() => update('color', c)} style={{
+              width: 32, height: 32, borderRadius: 6, background: c,
+              border: form.color === c ? '3px solid var(--text)' : '2px solid transparent',
+              cursor: 'pointer', padding: 0,
+            }}></button>
+          ))}
+          <input type="color" value={form.color} onChange={e => update('color', e.target.value)} style={{ width: 32, height: 32, border: 'none', padding: 0, cursor: 'pointer', background: 'transparent' }} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ===== 인원 신규/수정 모달 =====
+function UserModal({ open, onClose, onSave, onDelete, initialUser }) {
+  const { TEAMS, LEVELS, STATUSES } = window.APP_DATA;
+  const isEdit = !!initialUser;
+  const empty = {
+    id: '', name: '', team: TEAMS[0]?.id || 'DM', level: '초급', status: 'active',
+    isManager: false, joinedAt: null, resignedAt: null, note: '',
+  };
+  const [form, setForm] = useStateM(empty);
+
+  React.useEffect(() => {
+    if (open) {
+      if (initialUser) setForm({ ...initialUser });
+      else setForm({ ...empty, id: generateUserId() });
+    }
+  }, [open, initialUser?.id]);
+
+  const update = (k, v) => setForm({ ...form, [k]: v });
+  const save = () => {
+    if (!form.id || !form.name) return;
+    onSave({ ...form }, isEdit);
+    onClose();
+  };
+  const handleDelete = () => {
+    if (!confirm(`"${form.name}"님을 삭제하시겠습니까?\n가동률 기록도 함께 삭제됩니다.\n\n퇴사자는 삭제 대신 상태를 '퇴사'로 변경하는 것을 권장합니다.`)) return;
+    onDelete(form.id);
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open} onClose={onClose} width={560}
+      title={isEdit ? `팀원 수정 — ${initialUser?.name}` : '신규 팀원 / 입사자'}
+      footer={(
+        <>
+          {isEdit && <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={handleDelete}><Icon name="trash" size={13} /> 삭제</button>}
+          <div style={{ flex: 1 }}></div>
+          <button className="btn btn-sm" onClick={onClose}>취소</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={!form.id || !form.name}>
+            <Icon name="check" size={13} /> {isEdit ? '저장' : '추가'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div className="field">
+          <div className="field-label">이름</div>
+          <input className="input" value={form.name} onChange={e => update('name', e.target.value)} placeholder="홍길동" autoFocus />
+        </div>
+        <div className="field">
+          <div className="field-label">ID (내부)</div>
+          <input className="input" value={form.id} onChange={e => update('id', e.target.value)} disabled={isEdit} style={{ fontFamily: 'var(--font-mono)' }} />
+        </div>
+        <div className="field">
+          <div className="field-label">팀</div>
+          <select className="select" value={form.team} onChange={e => update('team', e.target.value)}>
+            {TEAMS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <div className="field-label">등급</div>
+          <select className="select" value={form.level} onChange={e => update('level', e.target.value)}>
+            {LEVELS.map(l => <option key={l}>{l}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <div className="field-label">상태</div>
+          <select className="select" value={form.status} onChange={e => update('status', e.target.value)}>
+            {Object.entries(STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <div className="field-label">관리자 여부</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: '1px solid var(--border-strong)', borderRadius: 6, background: 'var(--bg-elev)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={form.isManager} onChange={e => update('isManager', e.target.checked)} />
+            <span className="small">관리자 / 팀장</span>
+          </label>
+        </div>
+        <div className="field">
+          <div className="field-label">입사일 (선택)</div>
+          <input type="date" className="input" value={form.joinedAt || ''} onChange={e => update('joinedAt', e.target.value || null)} />
+        </div>
+        <div className="field">
+          <div className="field-label">퇴사일 (선택)</div>
+          <input type="date" className="input" value={form.resignedAt || ''} onChange={e => update('resignedAt', e.target.value || null)} />
+        </div>
+        <div className="field" style={{ gridColumn: 'span 2' }}>
+          <div className="field-label">비고</div>
+          <input className="input" value={form.note || ''} onChange={e => update('note', e.target.value)} placeholder="예: 9월 출산휴가 예정" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function generateUserId() {
+  const existing = (window.APP_DATA?.USERS || []).map(u => u.id);
+  let n = existing.length + 1;
+  let id;
+  do {
+    id = 'u' + String(n).padStart(3, '0');
+    n++;
+  } while (existing.includes(id));
+  return id;
+}
+
+Object.assign(window, { OverrideModal, PipelineModal, TeamModal, UserModal });

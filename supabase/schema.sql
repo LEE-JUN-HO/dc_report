@@ -30,7 +30,7 @@ create table teams (
 -- 2. USERS — 47명 (재직/휴직/퇴사 포함)
 -- ============================================================
 create type user_status as enum ('active', 'leave', 'resigned', 'pre_hire');
-create type user_level  as enum ('특급', '고급', '중급', '초급');
+create type user_level  as enum ('본부장', '특급', '고급', '중급', '초급');
 
 create table users (
   id          text primary key,              -- 'u001','u002',...

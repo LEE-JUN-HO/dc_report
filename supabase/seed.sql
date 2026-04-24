@@ -11,6 +11,7 @@ truncate table utilization, pipeline, users, teams restart identity cascade;
 -- TEAMS (9개)
 -- ============================================================
 insert into teams (id, name, color, sort_order) values
+  ('DC', 'DC', '#1E293B', 0),  -- 본부
   ('DM', 'DM', '#6366F1', 1),
   ('DF', 'DF', '#0EA5E9', 2),
   ('DS', 'DS', '#10B981', 3),
@@ -25,8 +26,9 @@ insert into teams (id, name, color, sort_order) values
 -- USERS (47명)
 -- ============================================================
 insert into users (id, name, team_id, level, status, is_manager, joined_at, resigned_at, note) values
+  -- DC 본부
+  ('u001','허순구','DC','본부장','active', true,  null,         null,         '본부장'),
   -- DM
-  ('u001','허순구','DM','특급','active',   true,  null,         null,         '관리자'),
   ('u002','박혜주','DM','고급','active',   false, null,         null,         null),
   ('u003','최철호','DM','중급','active',   false, null,         null,         null),
   ('u004','남하영','DM','초급','active',   false, null,         null,         null),

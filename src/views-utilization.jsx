@@ -8,12 +8,46 @@ function UtilizationView({ onOverride, onSelectUser }) {
   const [weekOffset, setWeekOffset] = useStateU(0);
   const [search, setSearch] = useStateU('');
 
-  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES } = window.APP_DATA;
+  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET } = window.APP_DATA;
 
   const WINDOW_SIZE = 8;
   const curIdx = currentWeekIdx();
   const startIdx = Math.max(0, Math.min(WEEKS.length - WINDOW_SIZE, curIdx - 3 + weekOffset));
   const visibleWeeks = WEEKS.slice(startIdx, startIdx + WINDOW_SIZE);
+
+  // 현재 주(=현재 주에 보고 있는 표의 중앙 주) — 기본은 실제 현재 주
+  // 집계 기준은 WEEKS[curIdx] (오늘 기준 W16) 고정
+  const currentWeek = WEEKS[curIdx];
+
+  // ===== DC 제외한 실무팀 집계 =====
+  const summaryStats = useMemoU(() => {
+    const fieldUsers = USERS.filter(u => u.status === 'active' && u.team !== 'DC');
+    const avgOf = (filterFn) => {
+      const ws = WEEKS.filter(filterFn);
+      if (ws.length === 0 || fieldUsers.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
+      let sum = 0, n = 0, over = 0, under = 0;
+      fieldUsers.forEach(u => {
+        ws.forEach(w => {
+          const v = computeUtilization(u.id, w.id).value;
+          sum += v; n++;
+          // 과부하/저활용은 '현재 주' 기준만 의미있음 (주 집계에서만 사용)
+          if (ws.length === 1) {
+            if (v > 1.0) over++;
+            else if (v < 0.5) under++;
+          }
+        });
+      });
+      return { avg: sum / n, overCount: over, underCount: under };
+    };
+    return {
+      userCount: fieldUsers.length,
+      week:    avgOf(w => w.id === currentWeek.id),
+      month:   avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
+      quarter: avgOf(w => w.quarter === currentWeek.quarter && w.year === currentWeek.year),
+      half:    avgOf(w => w.half === currentWeek.half && w.year === currentWeek.year),
+      year:    avgOf(w => w.year === currentWeek.year),
+    };
+  }, [curIdx]);
 
   const visibleUsers = useMemoU(() => {
     return USERS.filter(u => {
@@ -35,6 +69,13 @@ function UtilizationView({ onOverride, onSelectUser }) {
 
   return (
     <div className="col gap-16">
+      {/* 전체 팀 (DC 제외) 가동률 KPI */}
+      <SummaryBanner
+        stats={summaryStats}
+        currentWeek={currentWeek}
+        kpiTarget={KPI_TARGET}
+      />
+
       <div className="card" style={{ padding: '12px 18px' }}>
         <div className="row gap-12" style={{ flexWrap: 'wrap' }}>
           <Segmented
@@ -368,6 +409,76 @@ function UtilGantt({ grouped, weeks, onSelectUser }) {
             })}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ===== 상단 요약 배너 (DC 제외 전체팀) =====
+function SummaryBanner({ stats, currentWeek, kpiTarget }) {
+  const cards = [
+    { key: 'week',    label: '이번 주',   sub: `${currentWeek.label} (${currentWeek.range})`, value: stats.week.avg,    extra: { over: stats.week.overCount, under: stats.week.underCount } },
+    { key: 'month',   label: '이번 달',   sub: `${currentWeek.year}년 ${currentWeek.month}월`, value: stats.month.avg },
+    { key: 'quarter', label: '분기',      sub: `Q${currentWeek.quarter}`,                     value: stats.quarter.avg },
+    { key: 'half',    label: '반기',      sub: `${currentWeek.half}`,                         value: stats.half.avg },
+    { key: 'year',    label: '연간',      sub: `${currentWeek.year}`,                         value: stats.year.avg },
+  ];
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 18px 10px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
+        <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>전체 팀 가동률</span>
+        <span className="tiny subtle">DC 본부 제외 · {stats.userCount}명 재직 기준 · 목표 {(kpiTarget * 100).toFixed(0)}%</span>
+        <div style={{ flex: 1 }}></div>
+        {(stats.week.overCount > 0 || stats.week.underCount > 0) && (
+          <>
+            {stats.week.overCount > 0 && (
+              <span className="badge" style={{ background: 'var(--danger-weak)', color: 'var(--danger)' }}>
+                과부하 {stats.week.overCount}명
+              </span>
+            )}
+            {stats.week.underCount > 0 && (
+              <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
+                저활용 {stats.week.underCount}명
+              </span>
+            )}
+          </>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)' }}>
+        {cards.map((c, i) => (
+          <SummaryCard key={c.key} card={c} target={kpiTarget} isFirst={i === 0} showBorder={i < cards.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ card, target, isFirst, showBorder }) {
+  const v = card.value;
+  const pct = (v * 100).toFixed(1);
+  const color = v > 1.0 ? 'var(--danger)' : v >= target ? 'var(--success)' : v >= 0.7 ? 'var(--accent)' : 'var(--warn)';
+  const diff = v - target;
+  return (
+    <div style={{
+      padding: '14px 18px',
+      borderRight: showBorder ? '1px solid var(--border)' : 'none',
+      background: isFirst ? 'var(--bg-sunken)' : 'var(--bg-elev)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+        <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{card.label}</span>
+        <span className="tiny subtle">· {card.sub}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 4, gap: 6 }}>
+        <span className="num bold" style={{ fontSize: 22, color, letterSpacing: '-0.01em' }}>{pct}</span>
+        <span className="tiny subtle">%</span>
+        <span className="tiny" style={{ marginLeft: 'auto', color: diff >= 0 ? 'var(--success)' : 'var(--text-subtle)' }}>
+          {diff >= 0 ? '+' : ''}{(diff * 100).toFixed(1)}p
+        </span>
+      </div>
+      {/* 막대 — 목표선 85%를 기준 */}
+      <div style={{ marginTop: 6, height: 3, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ width: Math.min(v, 1.2) / 1.2 * 100 + '%', height: '100%', background: color, borderRadius: 2 }}></div>
+        <div style={{ position: 'absolute', left: (target / 1.2 * 100) + '%', top: -1, width: 1, height: 5, background: 'var(--text-muted)', opacity: 0.5 }}></div>
       </div>
     </div>
   );

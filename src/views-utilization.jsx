@@ -14,9 +14,6 @@ function UtilizationView({ onOverride, onSelectUser }) {
   const curIdx = currentWeekIdx();
   const startIdx = Math.max(0, Math.min(WEEKS.length - WINDOW_SIZE, curIdx - 3 + weekOffset));
   const visibleWeeks = WEEKS.slice(startIdx, startIdx + WINDOW_SIZE);
-
-  // 현재 주(=현재 주에 보고 있는 표의 중앙 주) — 기본은 실제 현재 주
-  // 집계 기준은 WEEKS[curIdx] (오늘 기준 W16) 고정
   const currentWeek = WEEKS[curIdx];
 
   // ===== DC 제외한 실무팀 집계 =====
@@ -30,7 +27,6 @@ function UtilizationView({ onOverride, onSelectUser }) {
         ws.forEach(w => {
           const v = computeUtilization(u.id, w.id).value;
           sum += v; n++;
-          // 과부하/저활용은 '현재 주' 기준만 의미있음 (주 집계에서만 사용)
           if (ws.length === 1) {
             if (v > 1.0) over++;
             else if (v < 0.5) under++;

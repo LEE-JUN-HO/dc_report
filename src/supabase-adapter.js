@@ -1,17 +1,22 @@
 // ============================================================
-// Supabase 연동 어댑터 (옵셔널)
+// Supabase 연동 어댑터
 //
-// 사용법:
-// 1. HTML에 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 추가
-// 2. localStorage에 SUPABASE_URL / SUPABASE_ANON_KEY 저장 (배포 가이드 참고)
-// 3. 이 파일은 자동으로 window.APP_DATA를 DB 기반으로 스왑
+// 우선순위:
+//   1) localStorage (설정 화면에서 입력한 값) — 개발자/관리자용
+//   2) window.SUPABASE_URL / SUPABASE_ANON_KEY — index.html 하드코딩
+//      → 팀원 전체가 공유하는 공용 연결
 //
-// 연결 실패 시 기본 더미 데이터로 fallback 동작.
+// 연결 실패 시 로컬 더미 데이터로 fallback.
 // ============================================================
 
 (async function() {
-  const URL = localStorage.getItem('SUPABASE_URL') || window.SUPABASE_URL;
-  const KEY = localStorage.getItem('SUPABASE_ANON_KEY') || window.SUPABASE_ANON_KEY;
+  const URL_FROM_LS = localStorage.getItem('SUPABASE_URL');
+  const KEY_FROM_LS = localStorage.getItem('SUPABASE_ANON_KEY');
+
+  // 하드코딩 플레이스홀더는 무시 (실제 값으로 교체 안 됐으면 localStorage나 데모로 fallback)
+  const isPlaceholder = (v) => !v || v.includes('여기에') || v === '';
+  const URL = URL_FROM_LS || (isPlaceholder(window.SUPABASE_URL) ? null : window.SUPABASE_URL);
+  const KEY = KEY_FROM_LS || (isPlaceholder(window.SUPABASE_ANON_KEY) ? null : window.SUPABASE_ANON_KEY);
 
   if (!URL || !KEY || !window.supabase) {
     console.info('[Resource Hub] Supabase 미연결 — 로컬 데모 데이터 사용');
@@ -76,9 +81,9 @@
     };
     window.APP_DATA.savePipeline = async (p) => {
       await client.from('pipeline').upsert({
-        id: p.id, priority: p.priority, client: p.client, kind: p.kind, status: p.status,
+        id: p.id, priority: p.priority || 99, client: p.client, kind: p.kind || 'PJ', status: p.status,
         sales: p.sales, pre_sales: p.preSales,
-        start_date: p.start, end_date: p.end, mm: p.mm,
+        start_date: p.start || null, end_date: p.end || null, mm: p.mm,
         members: p.members, note: p.note,
       });
     };

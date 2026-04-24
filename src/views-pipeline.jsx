@@ -231,8 +231,8 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.start?.slice(5) || '—'}</td>
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.end?.slice(5) || '—'}</td>
                   <td className="small num bold" style={{ textAlign: 'right' }} onClick={() => onProjectClick(p.id)}>{p.mm != null ? p.mm : '—'}</td>
-                  <td className="small ellipsis" style={{ maxWidth: 160 }} onClick={() => onProjectClick(p.id)}>{p.members || <span className="subtle">미정</span>}</td>
-                  <td className="tiny muted ellipsis" style={{ maxWidth: 220 }} onClick={() => onProjectClick(p.id)}>{p.note}</td>
+                  <td className="small ellipsis" style={{ maxWidth: 180 }} onClick={() => onProjectClick(p.id)}>{p.members || <span className="subtle">미정</span>}</td>
+                  <td className="tiny muted ellipsis" style={{ maxWidth: 260 }} onClick={() => onProjectClick(p.id)}>{p.note}</td>
                   <td style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                     <button className="btn btn-sm btn-ghost" style={{ padding: '2px 6px' }} onClick={() => setMenuOpenId(menuOpenId === p.id ? null : p.id)}>⋮</button>
                     {menuOpenId === p.id && (

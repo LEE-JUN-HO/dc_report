@@ -1,3 +1,7 @@
+<script>
+  window.SUPABASE_URL = 'https://bvctbvtgnvxhefdxwtmn.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2Y3RidnRnbnZ4aGVmZHh3dG1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODQ3NDYsImV4cCI6MjA5MjU2MDc0Nn0.9WVE8CEMspSbwAljK839vP7G0SsPT3OEAX804MVcDd4';
+</script>
 <!doctype html>
 <html lang="ko">
 <head>
@@ -12,6 +16,24 @@
 
 <!-- Supabase (선택) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+<!-- ============================================================
+  Supabase 공용 연결 설정
+  ------------------------------------------------------------
+  아래 두 줄을 실제 값으로 교체한 뒤 GitHub에 push 하면,
+  URL을 아는 누구나 로그인 없이 자동으로 DB에 연결됩니다.
+
+  값 찾는 곳: Supabase 대시보드 → Project Settings → API
+    - Project URL        → SUPABASE_URL
+    - anon public key    → SUPABASE_ANON_KEY (service_role 아님!)
+
+  ⚠ 보안: URL이 외부에 노출되면 누구나 수정 가능합니다.
+          사내 공유 전용으로만 쓰세요.
+============================================================ -->
+<script>
+  window.SUPABASE_URL      = 'https://여기에실제URL넣기.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGc...여기에실제anon키넣기';
+</script>
 </head>
 <body>
 <div id="root"></div>

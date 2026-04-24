@@ -1,0 +1,117 @@
+// ============================================================
+// Supabase 연동 어댑터 (옵셔널)
+//
+// 사용법:
+// 1. HTML에 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script> 추가
+// 2. localStorage에 SUPABASE_URL / SUPABASE_ANON_KEY 저장 (배포 가이드 참고)
+// 3. 이 파일은 자동으로 window.APP_DATA를 DB 기반으로 스왑
+//
+// 연결 실패 시 기본 더미 데이터로 fallback 동작.
+// ============================================================
+
+(async function() {
+  const URL = localStorage.getItem('SUPABASE_URL') || window.SUPABASE_URL;
+  const KEY = localStorage.getItem('SUPABASE_ANON_KEY') || window.SUPABASE_ANON_KEY;
+
+  if (!URL || !KEY || !window.supabase) {
+    console.info('[Resource Hub] Supabase 미연결 — 로컬 데모 데이터 사용');
+    return;
+  }
+
+  const client = window.supabase.createClient(URL, KEY);
+  console.info('[Resource Hub] Supabase 연결 시도 →', URL);
+
+  try {
+    // 1. 팀/인원/가동률/파이프라인 병렬 로드
+    const [tRes, uRes, utRes, pRes] = await Promise.all([
+      client.from('teams').select('*').order('sort_order'),
+      client.from('users').select('*').order('id'),
+      client.from('utilization').select('*'),
+      client.from('pipeline').select('*').order('priority').order('start_date'),
+    ]);
+
+    if (tRes.error || uRes.error || utRes.error || pRes.error) {
+      throw new Error('쿼리 실패: ' + JSON.stringify([tRes, uRes, utRes, pRes].map(r => r.error?.message).filter(Boolean)));
+    }
+
+    // 2. 기존 APP_DATA를 DB 데이터로 교체
+    const TEAMS = tRes.data.map(t => ({ id: t.id, name: t.name, color: t.color }));
+    const USERS = uRes.data.map(u => ({
+      id: u.id, name: u.name, team: u.team_id, level: u.level,
+      status: u.status, isManager: u.is_manager,
+      joinedAt: u.joined_at, resignedAt: u.resigned_at, note: u.note,
+    }));
+    const UTIL = {};
+    utRes.data.forEach(row => {
+      if (!UTIL[row.user_id]) UTIL[row.user_id] = {};
+      UTIL[row.user_id][row.week_id] = { client: row.client, value: row.value, note: row.note };
+    });
+    const PIPELINE = pRes.data.map(p => ({
+      id: p.id, priority: p.priority, client: p.client, kind: p.kind, status: p.status,
+      sales: p.sales, preSales: p.pre_sales,
+      start: p.start_date, end: p.end_date,
+      mm: p.mm != null ? +p.mm : null,
+      members: p.members, note: p.note,
+    }));
+
+    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE });
+    window.APP_DATA.SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
+    window.__SUPABASE_CLIENT__ = client;
+    window.__SUPABASE_CONNECTED__ = true;
+
+    // 3. 저장 훅 오버라이드 (UTIL 수정 시 DB upsert)
+    const origCompute = window.APP_DATA.computeUtilization;
+    window.APP_DATA.computeUtilization = origCompute; // 동일 — 메모리 데이터 참조
+
+    window.APP_DATA.saveUtilization = async (userId, weekId, value, clientName, note) => {
+      if (value == null && !clientName && !note) {
+        await client.from('utilization').delete().match({ user_id: userId, week_id: weekId });
+      } else {
+        await client.from('utilization').upsert({
+          user_id: userId, week_id: weekId,
+          value, client: clientName, note,
+          updated_at: new Date().toISOString(),
+        });
+      }
+    };
+    window.APP_DATA.savePipeline = async (p) => {
+      await client.from('pipeline').upsert({
+        id: p.id, priority: p.priority, client: p.client, kind: p.kind, status: p.status,
+        sales: p.sales, pre_sales: p.preSales,
+        start_date: p.start, end_date: p.end, mm: p.mm,
+        members: p.members, note: p.note,
+      });
+    };
+    window.APP_DATA.deletePipeline = async (id) => {
+      await client.from('pipeline').delete().eq('id', id);
+    };
+
+    // 4. Realtime 구독 — 다른 사용자 변경 자동 반영
+    client
+      .channel('util-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'utilization' }, payload => {
+        console.info('[Realtime] util changed', payload);
+        window.dispatchEvent(new CustomEvent('data-changed'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline' }, payload => {
+        console.info('[Realtime] pipeline changed', payload);
+        window.dispatchEvent(new CustomEvent('data-changed'));
+      })
+      .subscribe();
+
+    // 5. 연결 성공 배지
+    const badge = document.createElement('div');
+    badge.textContent = '☁ Supabase 연결됨';
+    badge.style.cssText = 'position:fixed;bottom:12px;left:12px;background:#10B981;color:white;padding:4px 10px;border-radius:4px;font-size:11px;z-index:99;box-shadow:0 2px 8px rgba(0,0,0,0.15);';
+    document.body.appendChild(badge);
+    setTimeout(() => badge.remove(), 3000);
+
+    console.info(`[Resource Hub] ✓ 연결 성공: ${TEAMS.length}팀, ${USERS.length}명, ${PIPELINE.length}건, ${utRes.data.length}개 가동률 레코드`);
+  } catch (err) {
+    console.error('[Resource Hub] Supabase 연결 실패:', err);
+    const badge = document.createElement('div');
+    badge.innerHTML = `⚠ Supabase 연결 실패<br><span style="font-size:10px">${err.message}</span>`;
+    badge.style.cssText = 'position:fixed;bottom:12px;left:12px;background:#DC2626;color:white;padding:6px 10px;border-radius:4px;font-size:11px;z-index:99;max-width:280px;';
+    document.body.appendChild(badge);
+  }
+})();

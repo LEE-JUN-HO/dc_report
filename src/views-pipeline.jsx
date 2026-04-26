@@ -178,7 +178,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
       };
       window.APP_DATA.PIPELINE.unshift(newEntry);
       if (window.APP_DATA.savePipeline) {
-        try { await window.APP_DATA.savePipeline(newEntry); } catch (e) { console.error(e); }
+        try { await window.APP_DATA.savePipeline(newEntry); } catch (e) { console.error(e); alert('저장 실패: ' + e.message); }
       }
     }
     const addedIds = new Set(list.map(c => c.id));

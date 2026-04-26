@@ -72,54 +72,86 @@
     const origCompute = window.APP_DATA.computeUtilization;
     window.APP_DATA.computeUtilization = origCompute; // 동일 — 메모리 데이터 참조
 
+    function throwIfError(res, label) {
+      if (res.error) {
+        const msg = `[Supabase] ${label} 실패: ${res.error.message || JSON.stringify(res.error)}`;
+        console.error(msg, res.error);
+        throw new Error(res.error.message || label + ' 실패');
+      }
+    }
+
     window.APP_DATA.saveUtilization = async (userId, weekId, value, clientName, note) => {
       if (value == null && !clientName && !note) {
-        await client.from('utilization').delete().match({ user_id: userId, week_id: weekId });
+        throwIfError(
+          await client.from('utilization').delete().match({ user_id: userId, week_id: weekId }),
+          'utilization 삭제'
+        );
       } else {
-        await client.from('utilization').upsert({
-          user_id: userId, week_id: weekId,
-          value, client: clientName, note,
-          updated_at: new Date().toISOString(),
-        });
+        throwIfError(
+          await client.from('utilization').upsert({
+            user_id: userId, week_id: weekId,
+            value, client: clientName, note,
+            updated_at: new Date().toISOString(),
+          }),
+          'utilization 저장'
+        );
       }
     };
     window.APP_DATA.savePipeline = async (p) => {
-      await client.from('pipeline').upsert({
-        id: p.id, priority: p.priority || 99, client: p.client, kind: p.kind || 'PJ', status: p.status,
-        sales: p.sales, pre_sales: p.preSales,
-        start_date: p.start || null, end_date: p.end || null, mm: p.mm,
-        members: p.members, note: p.note,
-        slack_channel_id: p.slackChannelId || null,
-      });
+      throwIfError(
+        await client.from('pipeline').upsert({
+          id: p.id, priority: p.priority || 99, client: p.client, kind: p.kind || 'PJ', status: p.status,
+          sales: p.sales, pre_sales: p.preSales,
+          start_date: p.start || null, end_date: p.end || null, mm: p.mm,
+          members: p.members, note: p.note,
+          slack_channel_id: p.slackChannelId || null,
+        }),
+        'pipeline 저장'
+      );
     };
     window.APP_DATA.deletePipeline = async (id) => {
-      await client.from('pipeline').delete().eq('id', id);
+      throwIfError(
+        await client.from('pipeline').delete().eq('id', id),
+        'pipeline 삭제'
+      );
     };
 
     // ===== 팀 CRUD =====
     window.APP_DATA.saveTeam = async (t) => {
-      await client.from('teams').upsert({
-        id: t.id, name: t.name, color: t.color,
-        sort_order: t.sortOrder ?? 99,
-      });
+      throwIfError(
+        await client.from('teams').upsert({
+          id: t.id, name: t.name, color: t.color,
+          sort_order: t.sortOrder ?? 99,
+        }),
+        'team 저장'
+      );
     };
     window.APP_DATA.deleteTeam = async (id) => {
-      await client.from('teams').delete().eq('id', id);
+      throwIfError(
+        await client.from('teams').delete().eq('id', id),
+        'team 삭제'
+      );
     };
 
     // ===== 인원 CRUD =====
     window.APP_DATA.saveUser = async (u) => {
-      await client.from('users').upsert({
-        id: u.id, name: u.name, team_id: u.team, level: u.level,
-        status: u.status, is_manager: u.isManager || false,
-        joined_at: u.joinedAt || null,
-        resigned_at: u.resignedAt || null,
-        note: u.note || null,
-      });
+      throwIfError(
+        await client.from('users').upsert({
+          id: u.id, name: u.name, team_id: u.team, level: u.level,
+          status: u.status, is_manager: u.isManager || false,
+          joined_at: u.joinedAt || null,
+          resigned_at: u.resignedAt || null,
+          note: u.note || null,
+        }),
+        'user 저장'
+      );
     };
     window.APP_DATA.deleteUser = async (id) => {
       // utilization은 ON DELETE CASCADE로 자동 정리됨
-      await client.from('users').delete().eq('id', id);
+      throwIfError(
+        await client.from('users').delete().eq('id', id),
+        'user 삭제'
+      );
     };
 
     // 4. Realtime 구독 — 다른 사용자 변경 자동 반영

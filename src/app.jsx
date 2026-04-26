@@ -120,7 +120,7 @@ function App() {
       PIPELINE.unshift(p);
     }
     if (window.APP_DATA.savePipeline) {
-      try { await window.APP_DATA.savePipeline(p); } catch (e) { console.error(e); }
+      try { await window.APP_DATA.savePipeline(p); } catch (e) { console.error(e); alert('파이프라인 저장 실패: ' + e.message); }
     }
     setDataVersion(v => v + 1);
   };
@@ -129,7 +129,7 @@ function App() {
     const idx = PIPELINE.findIndex(x => x.id === id);
     if (idx >= 0) PIPELINE.splice(idx, 1);
     if (window.APP_DATA.deletePipeline) {
-      try { await window.APP_DATA.deletePipeline(id); } catch (e) { console.error(e); }
+      try { await window.APP_DATA.deletePipeline(id); } catch (e) { console.error(e); alert('파이프라인 삭제 실패: ' + e.message); }
     }
     setDataVersion(v => v + 1);
   };

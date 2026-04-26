@@ -16,31 +16,19 @@ function SlackIcon({ size = 14 }) {
   );
 }
 
-async function fetchSlackSVChannels(token) {
-  const all = [];
-  let cursor = '';
-  do {
-    const params = new URLSearchParams({ limit: '200', types: 'public_channel,private_channel' });
-    if (cursor) params.set('cursor', cursor);
-    const res = await fetch('https://slack.com/api/conversations.list?' + params, {
-      headers: { Authorization: 'Bearer ' + token },
-    });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error);
-    all.push(...(data.channels || []));
-    cursor = (data.response_metadata && data.response_metadata.next_cursor) || '';
-  } while (cursor);
+async function fetchSlackSVChannels() {
+  const res = await fetch('/api/slack-channels');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error);
 
   const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
-  return all
-    .filter(ch => /sv\d{2}/i.test(ch.name))
-    .map(ch => {
-      const svIdx = ch.name.toLowerCase().indexOf(':sv');
-      const svName = svIdx >= 0 ? ch.name.slice(svIdx + 1) : ch.name;
-      const client = svName.replace(/^sv\d{2}-/i, '').split('-')[0] || svName;
-      return { id: ch.id, svName, client, slackUrl: wsUrl + '/archives/' + ch.id };
-    });
+  return (data.channels || []).map(ch => {
+    const svIdx = ch.name.toLowerCase().indexOf(':sv');
+    const svName = svIdx >= 0 ? ch.name.slice(svIdx + 1) : ch.name;
+    const client = svName.replace(/^sv\d{2}-/i, '').split('-')[0] || svName;
+    return { id: ch.id, svName, client, slackUrl: wsUrl + '/archives/' + ch.id };
+  });
 }
 
 function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange }) {
@@ -155,14 +143,12 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
   };
 
   const doSync = async () => {
-    const token = localStorage.getItem('SLACK_BOT_TOKEN');
-    if (!token) { alert('설정 → 데이터 동기화 탭에서 Slack 봇 토큰을 먼저 입력해주세요.'); return; }
     setSyncing(true);
     setSyncOpen(true);
     setSyncResults([]);
     try {
       const existingIds = new Set(PIPELINE.filter(p => p.slackChannelId).map(p => p.slackChannelId));
-      const channels = await fetchSlackSVChannels(token);
+      const channels = await fetchSlackSVChannels();
       setSyncResults(channels.filter(ch => !existingIds.has(ch.id)));
     } catch (e) {
       alert('Slack 동기화 실패: ' + e.message);

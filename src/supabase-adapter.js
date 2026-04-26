@@ -19,7 +19,35 @@
   const KEY = KEY_FROM_LS || (isPlaceholder(window.SUPABASE_ANON_KEY) ? null : window.SUPABASE_ANON_KEY);
 
   if (!URL || !KEY || !window.supabase) {
-    console.info('[Resource Hub] Supabase 미연결 — 로컬 데모 데이터 사용');
+    console.info('[Resource Hub] Supabase 미연결 — localStorage 폴백 사용');
+
+    const LS_KEY = 'rh_util_overrides';
+    const loadOverrides = () => {
+      try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
+    };
+
+    // 저장된 오버라이드를 UTIL에 병합 (초기 데이터 위에 덮어씀)
+    const saved = loadOverrides();
+    Object.entries(saved).forEach(([userId, weeks]) => {
+      if (!window.APP_DATA.UTIL[userId]) window.APP_DATA.UTIL[userId] = {};
+      Object.assign(window.APP_DATA.UTIL[userId], weeks);
+    });
+
+    window.APP_DATA.saveUtilization = (userId, weekId, value, clientName, note) => {
+      const overrides = loadOverrides();
+      if (value == null && !clientName && !note) {
+        if (overrides[userId]) {
+          delete overrides[userId][weekId];
+          if (Object.keys(overrides[userId]).length === 0) delete overrides[userId];
+        }
+      } else {
+        if (!overrides[userId]) overrides[userId] = {};
+        overrides[userId][weekId] = { value, client: clientName, note };
+      }
+      localStorage.setItem(LS_KEY, JSON.stringify(overrides));
+      return Promise.resolve();
+    };
+
     return;
   }
 

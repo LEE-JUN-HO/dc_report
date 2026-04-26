@@ -27,8 +27,8 @@
           사내 공유 전용으로만 쓰세요.
 ============================================================ -->
 <script>
-  window.SUPABASE_URL = 'https://bvctbvtgnvxhefdxwtmn.supabase.co';
-  window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ2Y3RidnRnbnZ4aGVmZHh3dG1uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5ODQ3NDYsImV4cCI6MjA5MjU2MDc0Nn0.9WVE8CEMspSbwAljK839vP7G0SsPT3OEAX804MVcDd4';
+  window.SUPABASE_URL      = 'https://여기에실제URL넣기.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGc...여기에실제anon키넣기';
 </script>
 </head>
 <body>
@@ -38,7 +38,7 @@
 <script src="src/data.js?v=rollback1"></script>
 
 <!-- Supabase 어댑터 (localStorage에 URL/KEY 있으면 자동 연결) -->
-<script src="src/supabase-adapter.js?v=rollback1"></script>
+<script src="src/supabase-adapter.js?v=ls-fallback1"></script>
 
 <!-- 컴포넌트 -->
 <script type="text/babel" src="src/common.jsx?v=rollback1"></script>
@@ -48,7 +48,7 @@
 <script type="text/babel" src="src/views-detail.jsx?v=rollback1"></script>
 <script type="text/babel" src="src/views-modals.jsx?v=rollback1"></script>
 <script type="text/babel" src="src/views-settings.jsx?v=rollback1"></script>
-<script type="text/babel" src="src/app.jsx?v=rollback1"></script>
+<script type="text/babel" src="src/app.jsx?v=fix-tab-reset"></script>
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4edd5f8ec12a48cfa682ab8261b80a79","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

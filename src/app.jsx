@@ -217,7 +217,7 @@ function App() {
   }[view] || { title: '', sub: '' };
 
   return (
-    <div className="app" key={dataVersion}>
+    <div className="app">
       <Sidebar view={view} onNavigate={navigate} />
       <div className="main">
         <div className="topbar">

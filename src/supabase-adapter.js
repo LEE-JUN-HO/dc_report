@@ -65,6 +65,9 @@
     window.__SUPABASE_CLIENT__ = client;
     window.__SUPABASE_CONNECTED__ = true;
 
+    // React에 데이터 교체 알림 — PipelineView 등이 재렌더링되도록
+    window.dispatchEvent(new CustomEvent('data-changed'));
+
     // 3. 저장 훅 오버라이드 (UTIL 수정 시 DB upsert)
     const origCompute = window.APP_DATA.computeUtilization;
     window.APP_DATA.computeUtilization = origCompute; // 동일 — 메모리 데이터 참조

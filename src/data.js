@@ -439,45 +439,7 @@ const PIPELINE_STAGES = [
 ];
 const PROJECT_KINDS = ['SM', 'PoC', 'PJ', 'PJ(M)', 'PS', '운영'];
 
-const PIPELINE = [
-  { priority: 99, client: 'SKC',                kind: 'SM',    status: '완료', sales: '윤종식',          preSales: null,      start: '2026-03-04', end: '2026-03-31', mm: 1,    members: '',                                 note: '2/23 js 3/4부터 투입. 계약 완료' },
-  { priority: 99, client: '미래에셋자산운용',   kind: 'PoC',   status: '확정', sales: '박치언',          preSales: null,      start: '2026-03-14', end: '2026-03-29', mm: null, members: '김태규, 최진아(박혜주)',            note: '3/26 CE 추가요건으로 기간 연장' },
-  { priority: 99, client: '다올저축은행',       kind: 'PoC',   status: '확정', sales: '김지원',          preSales: null,      start: '2026-03-15', end: '2026-03-29', mm: 0.5,  members: '이세영, 정소영(김보람)',            note: '3/28 JH 추가 요청 사항으로 2~3일 추가계약' },
-  { priority: 99, client: '메리츠화재',         kind: 'SM',    status: '확정', sales: '박기열',          preSales: null,      start: '2026-03-18', end: '2026-07-31', mm: 16,   members: '김용진, 천우범, 이민영, 임지원',    note: '3/25 SM 5차 연장 계약서 날인본 전달' },
-  { priority: 99, client: 'UBASE',              kind: 'PJ',    status: '확정', sales: '박기열',          preSales: null,      start: '2026-03-20', end: '2026-05-07', mm: null, members: '김진규, 박경우',                    note: '3/14 JH 월~수 시작 가능성 높음' },
-  { priority: 99, client: '포스코 광양',        kind: 'PoC',   status: '확정', sales: '윤종식',          preSales: null,      start: '2026-03-20', end: '2026-03-27', mm: 0.15, members: '신민수, 최필수',                    note: '3/28 JH 타부서 요청으로 하루 연장' },
-  { priority: 99, client: 'LG엔솔',             kind: 'PJ',    status: '완료', sales: '박기열',          preSales: null,      start: '2026-03-25', end: '2026-06-24', mm: null, members: '김진규, 최유정, 최필수',            note: '3/4 gy 25일 시작 확정' },
-  { priority: 99, client: '삼성물산 패션부문',  kind: 'PJ',    status: '확정', sales: '윤종식',          preSales: null,      start: '2026-04-01', end: '2026-09-30', mm: null, members: '김보람, 이세영, 정소영',            note: '3/26 js 내부 보고 진행 중' },
-  { priority: 99, client: '풀무원(음성공장)',   kind: 'PJ',    status: '확정', sales: '박치언',          preSales: null,      start: '2026-04-04', end: '2026-06-03', mm: 4,    members: '오로라, 곽다인',                    note: '4/3 CE 전사 투자 막혀 무기한 홀딩' },
-  { priority: 99, client: '씨젠의료재단',       kind: 'PJ',    status: '확정', sales: '박기열',          preSales: null,      start: '2026-04-08', end: '2026-09-07', mm: 20,   members: '박혜주, 김태규, 최유정, 최진아',    note: '4/2 JH 내부 품의 완료. 4/4 투입 미팅' },
-  { priority: 99, client: 'JB금융지주',         kind: 'PS',    status: '확정', sales: '박치언',          preSales: null,      start: '2026-04-12', end: '2026-04-25', mm: 0.5,  members: '이지우',                            note: '4/11 CE 4/12 착수' },
-  { priority: 99, client: 'CJ대한통운 건설부문', kind: 'PJ',   status: '확정', sales: '박치언',          preSales: null,      start: '2026-04-22', end: '2026-05-08', mm: 0.5,  members: '최철호',                            note: '4/19 CE 4/22 비상주 확정' },
-  { priority: 99, client: '엔미디어플랫폼',     kind: 'PJ',    status: '확정', sales: '김지원',          preSales: null,      start: '2026-04-22', end: null,         mm: 2.5,  members: '장채령, 윤한별(.5)',                note: '4/2 JW 초급 2MM + 디자인 0.5MM 협의' },
-  { priority: 99, client: '우리금융지주',       kind: 'PJ',    status: '예정', sales: '박치언',          preSales: '김대중',  start: '2026-05-01', end: '2026-10-30', mm: 19,   members: '3명 × 6개월',                       note: '4/26 dj Closed lost (태블로 전환 실패)' },
-  { priority: 99, client: '신영증권',           kind: 'PoC',   status: '확정', sales: '박치언',          preSales: null,      start: '2026-05-03', end: '2026-05-10', mm: 0.25, members: '최필수',                            note: '4/30 CE 방문 PoC 일정협의 완료' },
-  { priority: 1,  client: '로티',               kind: 'PJ',    status: '예정', sales: '김지원',          preSales: '이준호',  start: '2026-05-13', end: '2026-07-12', mm: 2,    members: '오로라(1.5MM), 곽다인(0.5MM)',      note: '5/14 JH 로티 내부 사정으로 지연' },
-  { priority: 99, client: 'SK온',               kind: 'PJ',    status: '확정', sales: '윤종식',          preSales: null,      start: '2026-05-16', end: '2026-08-30', mm: 3.5,  members: '원지윤, 최철호+윤한별',             note: '4/23 js 최철호 매니저 투입 가능' },
-  { priority: 1,  client: 'CJ대한통운 인사운영', kind: 'PJ',   status: '예정', sales: '박치언',          preSales: null,      start: '2026-05-27', end: '2026-06-07', mm: 0.5,  members: '이지우(후보)',                      note: '5/9 CE 5/27 착수 협의 완료' },
-  { priority: 1,  client: 'LG에너지솔루션',     kind: 'PJ',    status: '확정', sales: '이정철',          preSales: '박기열',  start: '2026-06-01', end: '2026-08-31', mm: 5.5,  members: '신민수, 이지우',                    note: '5/2 GY 6/1 착수 팔로업 중' },
-  { priority: 1,  client: 'SK하이닉스',         kind: 'PJ',    status: '확정', sales: '윤종식',          preSales: null,      start: '2026-06-01', end: '2026-12-31', mm: 19,   members: '이찬희, 김수년, 장채령',            note: '5/8 SM 프로필 전달' },
-  { priority: 1,  client: '미래에셋자산운용',   kind: 'PJ',    status: '예정', sales: '박치언',          preSales: '이준호',  start: '2026-06-03', end: '2026-08-30', mm: 3,    members: 'TBD 1명',                           note: '5/14 6월 1주차 시작 논의 중' },
-  { priority: 1,  client: 'KT DS',              kind: 'SM',    status: '예정', sales: '이정철',          preSales: '박기열',  start: '2026-06-03', end: '2026-09-30', mm: 4,    members: '허민',                              note: '5/7 JH 6/3 시작 예정' },
-  { priority: 55, client: '아우디 (EY)',        kind: 'PJ(M)', status: '예정', sales: '윤종식',          preSales: null,      start: '2026-06-03', end: '2026-12-31', mm: 6,    members: '원지윤, 이수민',                    note: '4/17 js 결과 발표 대기' },
-  { priority: 55, client: '아시아나항공',       kind: 'PJ',    status: '확정', sales: '이정철',          preSales: '박기열',  start: '2026-06-03', end: '2026-12-31', mm: 53,   members: '허순구, 김진규, 김옥래 외 7명',     note: '5/2 GY 최유정→김미순 변경' },
-  { priority: 55, client: 'SK매직',             kind: '운영',  status: '확정', sales: '윤종식',          preSales: null,      start: '2026-06-10', end: '2026-12-31', mm: 6,    members: '이동인(BICNS)',                     note: '5/7 JH BICNS 인력으로 대체' },
-  { priority: 1,  client: '포스코 메타버스',    kind: 'PJ',    status: '예정', sales: '윤종식',          preSales: '이준호',  start: '2026-06-15', end: '2026-12-31', mm: 12,   members: 'TBD 1명, 최필수',                   note: '5/2 js 6월 중순~7월 초 투입' },
-  { priority: 55, client: '다우기술(키움증권)', kind: 'PoC',   status: '예정', sales: '박치언',          preSales: null,      start: '2026-06-24', end: null,         mm: null, members: '',                                  note: '6월말 PoC 진행 가능성' },
-  { priority: 1,  client: '신한투자증권',       kind: 'PJ',    status: '확정', sales: '박치언',          preSales: '이준호',  start: '2026-07-01', end: '2027-02-28', mm: 10,   members: '서동현, TBD, 최유정, 윤한별',       note: '4/25 CE 투입 일정 협의 완료' },
-  { priority: 55, client: '전남대',             kind: 'PJ',    status: '예정', sales: '정순보',          preSales: null,      start: '2026-07-01', end: '2026-09-30', mm: 4,    members: '2명 × 2개월',                       note: '4/24 sb 대시보드 개발' },
-  { priority: 55, client: '대성에너지',         kind: 'PJ',    status: '예정', sales: '박기열',          preSales: '이준호',  start: '2026-07-01', end: null,         mm: null, members: '',                                  note: '3/28 JH 5월부터 정식 라이선스' },
-  { priority: 1,  client: '파라다이스',         kind: 'PJ',    status: '예정', sales: '윤종식',          preSales: '김대중',  start: '2026-07-15', end: '2026-11-15', mm: 15,   members: 'TBD 3명',                           note: '5/7 JH 7/15 시작 예상' },
-  { priority: 1,  client: '현대해상화재',       kind: 'PJ',    status: '예정', sales: '박치언',          preSales: '김대중',  start: '2026-08-01', end: '2026-10-31', mm: 12,   members: '김용진, 천우범, 박경우, TBD',       note: '5/7 CE 4명×3달 변경 확정' },
-  { priority: 1,  client: '포스코 광양',        kind: 'PJ',    status: '예정', sales: '윤종식',          preSales: '이준호',  start: '2026-08-01', end: '2026-10-31', mm: 9,    members: '2~3명 × 3개월',                     note: '4/22 js 재무팀 미팅' },
-  { priority: 55, client: 'MBC',                kind: 'PJ(M)', status: '예정', sales: '김지원',          preSales: '이준호',  start: '2026-08-01', end: '2026-11-30', mm: 4,    members: 'TBD 1명',                           note: '3/28 JY 4월 총선 지연, 5월초 착수' },
-  { priority: 1,  client: '다올저축은행',       kind: 'PJ',    status: '예정', sales: '김지원',          preSales: '이준호',  start: '2026-08-05', end: '2026-11-29', mm: null, members: '최소 2명',                          note: '4/24 JW 7월초 시작 목표, 예산 2억' },
-  { priority: 55, client: '새마을금고',         kind: 'PJ',    status: '예정', sales: '박치언',          preSales: null,      start: '2026-09-01', end: null,         mm: 80,   members: '김용진, 천우범, 임지원',            note: '3/14 일정 밀릴 가능성' },
-  { priority: 55, client: 'SKC',                kind: 'PJ',    status: '예정', sales: '윤종식',          preSales: '이준호',  start: '2026-06-03', end: '2026-10-04', mm: 15,   members: '최재원, TBD 3명',                   note: '5/14 JH 수행 결정 확률 50%' },
-].map((p, i) => ({ id: `prj${String(i+1).padStart(3,'0')}`, ...p }));
+const PIPELINE = [];
 
 // ===== 가동률 조회 =====
 function computeUtilization(userId, weekId) {

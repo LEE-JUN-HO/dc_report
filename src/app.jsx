@@ -34,6 +34,13 @@ function App() {
     return () => window.removeEventListener('message', handler);
   }, []);
 
+  // Supabase 초기 로드 및 Realtime 변경 시 전체 재렌더링
+  useEffect(() => {
+    const handler = () => setDataVersion(v => v + 1);
+    window.addEventListener('data-changed', handler);
+    return () => window.removeEventListener('data-changed', handler);
+  }, []);
+
   const updateTweak = (key, value) => {
     const next = { ...tweaks, [key]: value };
     setTweaks(next);

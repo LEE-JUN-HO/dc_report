@@ -35,13 +35,21 @@ function UtilizationView({ onOverride, onSelectUser }) {
       });
       return { avg: sum / n, overCount: over, underCount: under };
     };
+    const nm  = currentWeek.month % 12 + 1;
+    const nmY = nm === 1 ? currentWeek.year + 1 : currentWeek.year;
+    const nnm  = nm % 12 + 1;
+    const nnmY = nnm === 1 ? nmY + 1 : nmY;
     return {
       userCount: fieldUsers.length,
-      week:    avgOf(w => w.id === currentWeek.id),
-      month:   avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
-      quarter: avgOf(w => w.quarter === currentWeek.quarter && w.year === currentWeek.year),
-      half:    avgOf(w => w.half === currentWeek.half && w.year === currentWeek.year),
-      year:    avgOf(w => w.year === currentWeek.year),
+      week:          avgOf(w => w.id === currentWeek.id),
+      month:         avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
+      nextMonth:     avgOf(w => w.month === nm  && w.year === nmY),
+      nextNextMonth: avgOf(w => w.month === nnm && w.year === nnmY),
+      quarter:       avgOf(w => w.quarter === currentWeek.quarter && w.year === currentWeek.year),
+      half:          avgOf(w => w.half === currentWeek.half && w.year === currentWeek.year),
+      year:          avgOf(w => w.year === currentWeek.year),
+      nextMonthMeta:     { month: nm,  year: nmY },
+      nextNextMonthMeta: { month: nnm, year: nnmY },
     };
   }, [curIdx]);
 
@@ -412,12 +420,15 @@ function UtilGantt({ grouped, weeks, onSelectUser }) {
 
 // ===== 상단 요약 배너 (DC 제외 전체팀) =====
 function SummaryBanner({ stats, currentWeek, kpiTarget }) {
+  const { nextMonthMeta: nm, nextNextMonthMeta: nnm } = stats;
   const cards = [
-    { key: 'week',    label: '이번 주',   sub: `${currentWeek.label} (${currentWeek.range})`, value: stats.week.avg,    extra: { over: stats.week.overCount, under: stats.week.underCount } },
-    { key: 'month',   label: '이번 달',   sub: `${currentWeek.year}년 ${currentWeek.month}월`, value: stats.month.avg },
-    { key: 'quarter', label: '분기',      sub: `Q${currentWeek.quarter}`,                     value: stats.quarter.avg },
-    { key: 'half',    label: '반기',      sub: `${currentWeek.half}`,                         value: stats.half.avg },
-    { key: 'year',    label: '연간',      sub: `${currentWeek.year}`,                         value: stats.year.avg },
+    { key: 'week',          label: '이번 주',   sub: `${currentWeek.label} (${currentWeek.range})`,  value: stats.week.avg,          extra: { over: stats.week.overCount, under: stats.week.underCount } },
+    { key: 'month',         label: '이번 달',   sub: `${currentWeek.year}년 ${currentWeek.month}월`, value: stats.month.avg },
+    { key: 'nextMonth',     label: '다음달',    sub: `${nm.year}년 ${nm.month}월`,                   value: stats.nextMonth.avg,     future: true },
+    { key: 'nextNextMonth', label: '다다음달',  sub: `${nnm.year}년 ${nnm.month}월`,                 value: stats.nextNextMonth.avg, future: true },
+    { key: 'quarter',       label: '분기',      sub: `Q${currentWeek.quarter}`,                      value: stats.quarter.avg },
+    { key: 'half',          label: '반기',      sub: `${currentWeek.half}`,                          value: stats.half.avg },
+    { key: 'year',          label: '연간',      sub: `${currentWeek.year}`,                          value: stats.year.avg },
   ];
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -440,7 +451,7 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
           </>
         )}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
         {cards.map((c, i) => (
           <SummaryCard key={c.key} card={c} target={kpiTarget} isFirst={i === 0} showBorder={i < cards.length - 1} />
         ))}
@@ -454,26 +465,27 @@ function SummaryCard({ card, target, isFirst, showBorder }) {
   const pct = (v * 100).toFixed(1);
   const color = v > 1.0 ? 'var(--danger)' : v >= target ? 'var(--success)' : v >= 0.7 ? 'var(--accent)' : 'var(--warn)';
   const diff = v - target;
+  const isFuture = !!card.future;
   return (
     <div style={{
       padding: '14px 18px',
       borderRight: showBorder ? '1px solid var(--border)' : 'none',
-      background: isFirst ? 'var(--bg-sunken)' : 'var(--bg-elev)',
+      background: isFirst ? 'var(--bg-sunken)' : isFuture ? 'color-mix(in srgb, var(--bg-elev) 85%, var(--accent-weak))' : 'var(--bg-elev)',
     }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{card.label}</span>
+        <span className="tiny bold" style={{ color: isFuture ? 'var(--accent)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{card.label}</span>
         <span className="tiny subtle">· {card.sub}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', marginTop: 4, gap: 6 }}>
-        <span className="num bold" style={{ fontSize: 22, color, letterSpacing: '-0.01em' }}>{pct}</span>
+        <span className="num bold" style={{ fontSize: 22, color: isFuture ? 'var(--text-muted)' : color, letterSpacing: '-0.01em', opacity: isFuture ? 0.75 : 1 }}>{pct}</span>
         <span className="tiny subtle">%</span>
-        <span className="tiny" style={{ marginLeft: 'auto', color: diff >= 0 ? 'var(--success)' : 'var(--text-subtle)' }}>
-          {diff >= 0 ? '+' : ''}{(diff * 100).toFixed(1)}p
+        <span className="tiny" style={{ marginLeft: 'auto', color: isFuture ? 'var(--text-subtle)' : diff >= 0 ? 'var(--success)' : 'var(--text-subtle)' }}>
+          {isFuture ? '예정' : (diff >= 0 ? '+' : '') + (diff * 100).toFixed(1) + 'p'}
         </span>
       </div>
       {/* 막대 — 목표선 85%를 기준 */}
       <div style={{ marginTop: 6, height: 3, background: 'var(--bg-sunken)', borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
-        <div style={{ width: Math.min(v, 1.2) / 1.2 * 100 + '%', height: '100%', background: color, borderRadius: 2 }}></div>
+        <div style={{ width: Math.min(v, 1.2) / 1.2 * 100 + '%', height: '100%', background: isFuture ? 'var(--accent-weak)' : color, borderRadius: 2 }}></div>
         <div style={{ position: 'absolute', left: (target / 1.2 * 100) + '%', top: -1, width: 1, height: 5, background: 'var(--text-muted)', opacity: 0.5 }}></div>
       </div>
     </div>

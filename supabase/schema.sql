@@ -84,11 +84,13 @@ create table pipeline (
   mm          numeric(5,2),                  -- Man-Month
   members     text,                          -- 자유 텍스트 '허순구, 김진규 × 2명'
   note        text,
+  slack_channel_id text unique,              -- Slack SV 채널 ID (optional)
   created_at  timestamptz default now(),
   updated_at  timestamptz default now()
 );
 create index pipeline_status_idx on pipeline(status);
 create index pipeline_sales_idx  on pipeline(sales);
+create index pipeline_slack_channel_idx on pipeline(slack_channel_id);
 
 -- ============================================================
 -- 5. updated_at 트리거

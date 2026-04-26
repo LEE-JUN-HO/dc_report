@@ -1,56 +1,28 @@
 // ============================================================
 // Supabase 연동 어댑터
 //
-// 우선순위:
-//   1) localStorage (설정 화면에서 입력한 값) — 개발자/관리자용
-//   2) window.SUPABASE_URL / SUPABASE_ANON_KEY — index.html 하드코딩
-//
-// Supabase 미연결 또는 연결 실패 시 localStorage 폴백으로 가동률 영속 저장.
+// 운영 데이터는 반드시 Supabase DB만 사용합니다.
+// 브라우저 localStorage는 가동률 저장소나 Supabase 자격증명 소스로 쓰지 않습니다.
 // ============================================================
 
 (async function() {
-  const URL_FROM_LS = localStorage.getItem('SUPABASE_URL');
-  const KEY_FROM_LS = localStorage.getItem('SUPABASE_ANON_KEY');
-
   const isPlaceholder = (v) => !v || v.includes('여기에') || v === '';
-  const URL = URL_FROM_LS || (isPlaceholder(window.SUPABASE_URL) ? null : window.SUPABASE_URL);
-  const KEY = KEY_FROM_LS || (isPlaceholder(window.SUPABASE_ANON_KEY) ? null : window.SUPABASE_ANON_KEY);
+  const URL = isPlaceholder(window.SUPABASE_URL) ? null : window.SUPABASE_URL;
+  const KEY = isPlaceholder(window.SUPABASE_ANON_KEY) ? null : window.SUPABASE_ANON_KEY;
+  let saveUtilizationImpl = null;
+  let resolveReady;
+  const ready = new Promise(resolve => { resolveReady = resolve; });
 
-  // ── localStorage 폴백 설정 (Supabase 미연결/실패 시 공통 사용) ──────────
-  function setupLocalStorageFallback() {
-    const LS_KEY = 'rh_util_overrides';
-    const loadOverrides = () => {
-      try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
-    };
+  window.__RESOURCE_HUB_DATA_READY__ = ready;
+  window.APP_DATA.saveUtilization = async (...args) => {
+    await ready;
+    if (!saveUtilizationImpl) throw new Error('저장 기능이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    return saveUtilizationImpl(...args);
+  };
 
-    // 저장된 오버라이드를 UTIL에 병합
-    const saved = loadOverrides();
-    Object.entries(saved).forEach(([userId, weeks]) => {
-      if (!window.APP_DATA.UTIL[userId]) window.APP_DATA.UTIL[userId] = {};
-      Object.assign(window.APP_DATA.UTIL[userId], weeks);
-    });
-
-    window.APP_DATA.saveUtilization = (userId, weekId, value, clientName, note) => {
-      const overrides = loadOverrides();
-      if (value == null && !clientName && !note) {
-        if (overrides[userId]) {
-          delete overrides[userId][weekId];
-          if (Object.keys(overrides[userId]).length === 0) delete overrides[userId];
-        }
-      } else {
-        if (!overrides[userId]) overrides[userId] = {};
-        overrides[userId][weekId] = { value, client: clientName, note };
-      }
-      localStorage.setItem(LS_KEY, JSON.stringify(overrides));
-      return Promise.resolve();
-    };
-
-    console.info('[Resource Hub] localStorage 폴백 활성화 — 가동률 브라우저 저장');
-  }
-
-  // ── Supabase 자격증명 없음 → 바로 폴백 ────────────────────────────────
   if (!URL || !KEY || !window.supabase) {
-    setupLocalStorageFallback();
+    console.error('[Resource Hub] Supabase 설정 없음 — DB 저장 비활성화');
+    resolveReady();
     return;
   }
 
@@ -59,10 +31,23 @@
   console.info('[Resource Hub] Supabase 연결 시도 →', URL);
 
   try {
+    async function fetchAllRows(table, queryBuilder, chunkSize = 1000) {
+      const rows = [];
+      for (let from = 0; ; from += chunkSize) {
+        const to = from + chunkSize - 1;
+        const res = await queryBuilder(client.from(table).select('*')).range(from, to);
+        if (res.error) return res;
+        rows.push(...(res.data || []));
+        if (!res.data || res.data.length < chunkSize) {
+          return { data: rows, error: null };
+        }
+      }
+    }
+
     const [tRes, uRes, utRes, pRes] = await Promise.all([
       client.from('teams').select('*').order('sort_order'),
       client.from('users').select('*').order('id'),
-      client.from('utilization').select('*'),
+      fetchAllRows('utilization', q => q.order('user_id').order('week_id')),
       client.from('pipeline').select('*').order('priority').order('start_date'),
     ]);
 
@@ -105,23 +90,55 @@
       }
     }
 
-    window.APP_DATA.saveUtilization = async (userId, weekId, value, clientName, note) => {
+    saveUtilizationImpl = async (userId, weekId, value, clientName, note) => {
+      const selectColumns = 'user_id,week_id,client,value,note,updated_at';
       if (value == null && !clientName && !note) {
         throwIfError(
           await client.from('utilization').delete().match({ user_id: userId, week_id: weekId }),
           'utilization 삭제'
         );
+        const verifyDelete = await client
+          .from('utilization')
+          .select('user_id,week_id')
+          .match({ user_id: userId, week_id: weekId })
+          .maybeSingle();
+        throwIfError(verifyDelete, 'utilization 삭제 확인');
+        if (verifyDelete.data) throw new Error('삭제 확인 실패: 데이터가 아직 Supabase에 남아 있습니다.');
+        console.info('[Resource Hub] utilization 삭제 완료', `${userId}/${weekId}`);
+        return null;
       } else {
+        const payload = {
+          user_id: userId,
+          week_id: weekId,
+          value: value == null ? null : Number(value),
+          client: clientName || null,
+          note: note || null,
+          updated_at: new Date().toISOString(),
+        };
         throwIfError(
-          await client.from('utilization').upsert({
-            user_id: userId, week_id: weekId,
-            value, client: clientName, note,
-            updated_at: new Date().toISOString(),
-          }),
+          await client
+            .from('utilization')
+            .upsert(payload, { onConflict: 'user_id,week_id' })
+            .select(selectColumns)
+            .single(),
           'utilization 저장'
         );
+        const verifySave = await client
+          .from('utilization')
+          .select(selectColumns)
+          .match({ user_id: userId, week_id: weekId })
+          .maybeSingle();
+        throwIfError(verifySave, 'utilization 저장 확인');
+        if (!verifySave.data) throw new Error('저장 확인 실패: Supabase에서 저장된 행을 다시 찾지 못했습니다.');
+        const savedValue = verifySave.data.value == null ? null : Number(verifySave.data.value);
+        if (savedValue !== payload.value || (verifySave.data.client || null) !== payload.client || (verifySave.data.note || null) !== payload.note) {
+          throw new Error('저장 확인 실패: Supabase에 저장된 값이 입력값과 다릅니다.');
+        }
+        console.info('[Resource Hub] utilization 저장 완료', `${userId}/${weekId}`, verifySave.data);
+        return verifySave.data;
       }
     };
+    resolveReady();
     window.APP_DATA.savePipeline = async (p) => {
       throwIfError(
         await client.from('pipeline').upsert({
@@ -193,12 +210,11 @@
     console.info(`[Resource Hub] ✓ 연결 성공: ${TEAMS.length}팀, ${USERS.length}명, ${PIPELINE.length}건, ${utRes.data.length}개 가동률 레코드`);
 
   } catch (err) {
-    // Supabase 연결/쿼리 실패 → localStorage 폴백으로 전환
-    console.error('[Resource Hub] Supabase 연결 실패 → localStorage 폴백:', err);
-    setupLocalStorageFallback();
+    console.error('[Resource Hub] Supabase 연결 실패 — DB 저장 비활성화:', err);
+    resolveReady();
 
     const badge = document.createElement('div');
-    badge.innerHTML = `⚠ Supabase 연결 실패 (로컬 저장)<br><span style="font-size:10px">${err.message}</span>`;
+    badge.innerHTML = `⚠ Supabase 연결 실패 (저장 비활성)<br><span style="font-size:10px">${err.message}</span>`;
     badge.style.cssText = 'position:fixed;bottom:12px;left:12px;background:#DC2626;color:white;padding:6px 10px;border-radius:4px;font-size:11px;z-index:99;max-width:280px;';
     document.body.appendChild(badge);
   }

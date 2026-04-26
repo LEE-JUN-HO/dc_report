@@ -11,6 +11,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
   const [client, setClient] = useStateM(current?.client || '');
   const [note, setNote] = useStateM(current?.note || '');
   const [mode, setMode] = useStateM(current?.note && !current?.client ? 'note' : 'work'); // work / note
+  const [saving, setSaving] = useStateM(false);
 
   React.useEffect(() => {
     if (open) {
@@ -18,23 +19,36 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
       setClient(current?.client || '');
       setNote(current?.note || '');
       setMode(current?.note && !current?.client ? 'note' : 'work');
+      setSaving(false);
     }
   }, [open, userId, weekId]);
 
   if (!open || !user || !week) return null;
 
-  const save = () => {
-    onSave({
-      userId, weekId,
-      value: mode === 'note' ? null : value,
-      client: mode === 'note' ? null : (client || null),
-      note: note || null,
-    });
-    onClose();
+  const save = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        userId, weekId,
+        value: mode === 'note' ? null : value,
+        client: mode === 'note' ? null : (client || null),
+        note: mode === 'note' ? (note || null) : null,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
-  const clear = () => {
-    onSave({ userId, weekId, value: null, client: null, note: null, clear: true });
-    onClose();
+  const clear = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await onSave({ userId, weekId, value: null, client: null, note: null, clear: true });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -43,10 +57,12 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
       title="가동률 편집"
       footer={(
         <>
-          {current && !current.empty && <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear}>비우기</button>}
+          {current && !current.empty && <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>비우기</button>}
           <div style={{ flex: 1 }}></div>
-          <button className="btn btn-sm" onClick={onClose}>취소</button>
-          <button className="btn btn-primary btn-sm" onClick={save}><Icon name="check" size={13} /> 저장</button>
+          <button className="btn btn-sm" onClick={onClose} disabled={saving}>취소</button>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
+            <Icon name="check" size={13} /> {saving ? '저장 중...' : '저장'}
+          </button>
         </>
       )}
     >

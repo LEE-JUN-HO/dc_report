@@ -1,31 +1,37 @@
 // 대시보드 — 실데이터 버전
 const { useMemo: useMemoDash } = React;
 
-function DashboardView({ onNavigate }) {
-  const { USERS, TEAMS, WEEKS, PIPELINE, computeUtilization, currentWeekIdx, KPI_TARGET } = window.APP_DATA;
+function DashboardView({ onNavigate, dataVersion }) {
+  const { USERS, TEAMS, WEEKS, PIPELINE, computeUtilization, currentWeekIdx, KPI_TARGET, isUserInUtilizationBase } = window.APP_DATA;
   const curIdx = currentWeekIdx();
   const currentWeek = WEEKS[curIdx];
   const activeUsers = USERS.filter(u => u.status === 'active');
+  const currentBaseUsers = USERS.filter(u => isUserInUtilizationBase(u, currentWeek));
 
-  // 이번 주 전사 평균 (재직자만)
+  // 이번 주 전사 평균 (계산 모수 기준)
   const weekAvg = useMemoDash(() => {
-    const vals = activeUsers.map(u => computeUtilization(u.id, currentWeek.id).value);
+    const vals = currentBaseUsers.map(u => computeUtilization(u.id, currentWeek.id).value);
     return vals.reduce((a,b)=>a+b,0) / (vals.length || 1);
-  }, []);
+  }, [dataVersion]);
   const lastWeekAvg = useMemoDash(() => {
     const lw = WEEKS[curIdx - 1];
     if (!lw) return 0;
-    const vals = activeUsers.map(u => computeUtilization(u.id, lw.id).value);
+    const vals = USERS.filter(u => isUserInUtilizationBase(u, lw)).map(u => computeUtilization(u.id, lw.id).value);
     return vals.reduce((a,b)=>a+b,0) / (vals.length || 1);
-  }, []);
+  }, [dataVersion]);
 
   const periodAvgs = useMemoDash(() => {
     const compute = (filter) => {
       const ws = WEEKS.filter(filter);
       if (ws.length === 0) return 0;
       let sum = 0, n = 0;
-      activeUsers.forEach(u => ws.forEach(w => { sum += computeUtilization(u.id, w.id).value; n++; }));
-      return sum / n;
+      ws.forEach(w => {
+        USERS.filter(u => isUserInUtilizationBase(u, w)).forEach(u => {
+          sum += computeUtilization(u.id, w.id).value;
+          n++;
+        });
+      });
+      return sum / (n || 1);
     };
     return {
       month:   compute(w => w.month === currentWeek.month),
@@ -33,37 +39,37 @@ function DashboardView({ onNavigate }) {
       half:    compute(w => w.half === currentWeek.half),
       year:    compute(() => true),
     };
-  }, []);
+  }, [dataVersion]);
 
   const teamAvgs = useMemoDash(() => {
     return TEAMS.map(t => {
-      const us = activeUsers.filter(u => u.team === t.id);
+      const us = USERS.filter(u => u.team === t.id && isUserInUtilizationBase(u, currentWeek));
       const vals = us.map(u => computeUtilization(u.id, currentWeek.id).value);
       const avg = vals.reduce((a,b)=>a+b,0) / (vals.length || 1);
       return { team: t, avg, count: us.length };
-    }).sort((a, b) => b.avg - a.avg);
-  }, []);
+    }).filter(x => x.count > 0).sort((a, b) => b.avg - a.avg);
+  }, [dataVersion]);
 
   // 지난 12주 + 향후 8주 트렌드
   const trend = useMemoDash(() => {
     const slice = WEEKS.slice(Math.max(0, curIdx - 11), Math.min(WEEKS.length, curIdx + 9));
     return slice.map((w, idx) => {
-      const vals = activeUsers.map(u => computeUtilization(u.id, w.id).value);
+      const vals = USERS.filter(u => isUserInUtilizationBase(u, w)).map(u => computeUtilization(u.id, w.id).value);
       const avg = vals.reduce((a,b)=>a+b,0) / (vals.length || 1);
       return { label: w.label, value: avg, isCurrent: w.num - 1 === curIdx, isFuture: w.num - 1 > curIdx };
     });
-  }, []);
+  }, [dataVersion]);
 
   const alerts = useMemoDash(() => {
     const over = [], under = [], onLeave = [];
-    activeUsers.forEach(u => {
+    currentBaseUsers.forEach(u => {
       const d = computeUtilization(u.id, currentWeek.id);
       if (d.value > 1.0) over.push({ user: u, value: d.value });
       else if (d.note && !d.client) onLeave.push({ user: u, note: d.note });
       else if (d.value < 0.5) under.push({ user: u, value: d.value });
     });
     return { over, under, onLeave };
-  }, []);
+  }, [dataVersion]);
 
   const pipelineStats = useMemoDash(() => {
     const cnt = { '완료': 0, '확정': 0, '예정': 0 };
@@ -73,7 +79,7 @@ function DashboardView({ onNavigate }) {
       mm[p.status] += (p.mm || 0);
     });
     return { cnt, mm, total: PIPELINE.length };
-  }, []);
+  }, [dataVersion]);
 
   const delta = weekAvg - lastWeekAvg;
 
@@ -85,7 +91,7 @@ function DashboardView({ onNavigate }) {
           value={`${(weekAvg * 100).toFixed(1)}`} unit="%"
           delta={delta} deltaLabel="vs 지난 주"
           sparkData={trend.slice(0, 13).map(t => t.value)}
-          targetHint={weekAvg < KPI_TARGET ? `목표 85% · ${((KPI_TARGET - weekAvg) * activeUsers.length).toFixed(1)} FTE 미달` : '목표 달성 ✓'}
+          targetHint={weekAvg < KPI_TARGET ? `목표 85% · ${((KPI_TARGET - weekAvg) * currentBaseUsers.length).toFixed(1)} FTE 미달` : '목표 달성 ✓'}
         />
         <KpiCard
           label={`${currentWeek.month}월 평균`}

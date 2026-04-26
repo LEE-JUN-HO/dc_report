@@ -17,10 +17,24 @@ function SlackIcon({ size = 14 }) {
 }
 
 async function fetchSlackSVChannels() {
-  const res = await fetch('/api/slack-channels');
+  const syncToken = localStorage.getItem('SLACK_SYNC_TOKEN') || '';
+  if (!syncToken.trim()) {
+    throw new Error('설정 > 데이터 동기화에서 Slack 동기화 토큰을 먼저 입력해주세요.');
+  }
+
+  const res = await fetch('/api/slack-channels', {
+    headers: { 'X-Resource-Hub-Token': syncToken.trim() },
+  });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   const data = await res.json();
-  if (!data.ok) throw new Error(data.error);
+  if (!data.ok) {
+    const messages = {
+      missing_slack_bot_token: '서버에 SLACK_BOT_TOKEN 환경변수가 없습니다.',
+      missing_slack_sync_token: '서버에 SLACK_SYNC_TOKEN 환경변수가 없습니다.',
+      invalid_sync_token: 'Slack 동기화 토큰이 올바르지 않습니다.',
+    };
+    throw new Error(messages[data.error] || data.error);
+  }
 
   const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
   return (data.channels || []).map(ch => {
@@ -31,7 +45,7 @@ async function fetchSlackSVChannels() {
   });
 }
 
-function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange }) {
+function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange, dataVersion }) {
   const { PIPELINE, PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE } = window.APP_DATA;
   const [statusFilter, setStatusFilter] = useStatePipe('all');
   const [kindFilter, setKindFilter] = useStatePipe('all');
@@ -56,7 +70,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     else if (sortKey === 'mm')  list.sort((a, b) => (b.mm||0) - (a.mm||0));
     else if (sortKey === 'priority') list.sort((a, b) => a.priority - b.priority);
     return list;
-  }, [statusFilter, kindFilter, salesFilter, search, sortKey]);
+  }, [statusFilter, kindFilter, salesFilter, search, sortKey, dataVersion]);
 
   const stats = useMemoPipe(() => {
     const byStatus = {};
@@ -68,7 +82,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
       if (byKind[p.kind] != null) byKind[p.kind]++;
     });
     return { byStatus, byKind };
-  }, [PIPELINE]);
+  }, [PIPELINE, dataVersion]);
 
   // === 편집 action ===
   const startEdit = (p) => {

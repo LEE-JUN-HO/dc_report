@@ -1,14 +1,14 @@
 // 주간 가동률 표 — 실제 데이터 버전
 const { useState: useStateU, useMemo: useMemoU } = React;
 
-function UtilizationView({ onOverride, onSelectUser }) {
+function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const [layout, setLayout] = useStateU('table');
   const [teamFilter, setTeamFilter] = useStateU('all');
   const [statusFilter, setStatusFilter] = useStateU('active'); // active/all
   const [weekOffset, setWeekOffset] = useStateU(0);
   const [search, setSearch] = useStateU('');
 
-  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET } = window.APP_DATA;
+  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET, isUserInUtilizationBase } = window.APP_DATA;
 
   const WINDOW_SIZE = 8;
   const curIdx = currentWeekIdx();
@@ -16,15 +16,14 @@ function UtilizationView({ onOverride, onSelectUser }) {
   const visibleWeeks = WEEKS.slice(startIdx, startIdx + WINDOW_SIZE);
   const currentWeek = WEEKS[curIdx];
 
-  // ===== DC 제외한 실무팀 집계 =====
+  // ===== 계산 모수 기준 집계 =====
   const summaryStats = useMemoU(() => {
-    const fieldUsers = USERS.filter(u => u.status === 'active' && u.team !== 'DC');
     const avgOf = (filterFn) => {
       const ws = WEEKS.filter(filterFn);
-      if (ws.length === 0 || fieldUsers.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
+      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
       let sum = 0, n = 0, over = 0, under = 0;
-      fieldUsers.forEach(u => {
-        ws.forEach(w => {
+      ws.forEach(w => {
+        USERS.filter(u => isUserInUtilizationBase(u, w)).forEach(u => {
           const v = computeUtilization(u.id, w.id).value;
           sum += v; n++;
           if (ws.length === 1) {
@@ -33,14 +32,14 @@ function UtilizationView({ onOverride, onSelectUser }) {
           }
         });
       });
-      return { avg: sum / n, overCount: over, underCount: under };
+      return { avg: sum / (n || 1), overCount: over, underCount: under };
     };
     const nm  = currentWeek.month % 12 + 1;
     const nmY = nm === 1 ? currentWeek.year + 1 : currentWeek.year;
     const nnm  = nm % 12 + 1;
     const nnmY = nnm === 1 ? nmY + 1 : nmY;
     return {
-      userCount: fieldUsers.length,
+      userCount: USERS.filter(u => isUserInUtilizationBase(u, currentWeek)).length,
       week:          avgOf(w => w.id === currentWeek.id),
       month:         avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
       nextMonth:     avgOf(w => w.month === nm  && w.year === nmY),
@@ -51,7 +50,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
       nextMonthMeta:     { month: nm,  year: nmY },
       nextNextMonthMeta: { month: nnm, year: nnmY },
     };
-  }, [curIdx]);
+  }, [curIdx, dataVersion]);
 
   const visibleUsers = useMemoU(() => {
     return USERS.filter(u => {
@@ -60,7 +59,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
       if (search && !u.name.includes(search)) return false;
       return true;
     });
-  }, [teamFilter, statusFilter, search]);
+  }, [teamFilter, statusFilter, search, dataVersion]);
 
   const grouped = useMemoU(() => {
     const map = {};
@@ -69,7 +68,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
       map[u.team].push(u);
     });
     return TEAMS.filter(t => map[t.id]).map(t => ({ team: t, users: map[t.id] }));
-  }, [visibleUsers]);
+  }, [visibleUsers, dataVersion]);
 
   return (
     <div className="col gap-16">
@@ -149,7 +148,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
 
 // ===== TABLE =====
 function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
-  const { computeUtilization, LEVEL_COLORS } = window.APP_DATA;
+  const { computeUtilization, LEVEL_COLORS, isUserInUtilizationBase } = window.APP_DATA;
   const NAME_W = 150;
   const LVL_W  = 56;
   const AVG_W  = 60;
@@ -181,13 +180,16 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
               <div style={{ padding: '6px 8px', textAlign: 'center' }}>
                 {(() => {
                   const all = [];
-                  users.forEach(u => weeks.forEach(w => all.push(computeUtilization(u.id, w.id).value)));
+                  users.forEach(u => weeks.forEach(w => {
+                    if (isUserInUtilizationBase(u, w)) all.push(computeUtilization(u.id, w.id).value);
+                  }));
                   const avg = all.reduce((a,b)=>a+b,0) / (all.length || 1);
                   return <span className="tiny num bold" style={{ color: avg > 1 ? 'var(--danger)' : avg < 0.5 ? 'var(--warn)' : 'var(--success)' }}>{(avg*100).toFixed(0)}%</span>;
                 })()}
               </div>
               {weeks.map(w => {
-                const teamAvg = users.reduce((s, u) => s + computeUtilization(u.id, w.id).value, 0) / (users.length || 1);
+                const baseUsers = users.filter(u => isUserInUtilizationBase(u, w));
+                const teamAvg = baseUsers.reduce((s, u) => s + computeUtilization(u.id, w.id).value, 0) / (baseUsers.length || 1);
                 return (
                   <div key={w.id} style={{ padding: '6px 6px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
                     <span className="tiny num" style={{ fontWeight: 600, color: teamAvg > 1 ? 'var(--danger)' : teamAvg > 0.8 ? 'var(--success)' : 'var(--text-muted)' }}>
@@ -434,7 +436,7 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ padding: '12px 18px 10px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
         <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>전체 팀 가동률</span>
-        <span className="tiny subtle">DC 본부 제외 · {stats.userCount}명 재직 기준 · 목표 {(kpiTarget * 100).toFixed(0)}%</span>
+        <span className="tiny subtle">계산 모수 {stats.userCount}명 · 목표 {(kpiTarget * 100).toFixed(0)}%</span>
         <div style={{ flex: 1 }}></div>
         {(stats.week.overCount > 0 || stats.week.underCount > 0) && (
           <>

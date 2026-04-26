@@ -119,6 +119,22 @@ for (let i = 1; i <= 53; i++) {
   });
 }
 
+const UTIL_BASE_EXCLUDED_USER_IDS = new Set(['u043', 'u046']); // DX 강승일, 김서연
+function parseYMDDate(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function isUserInUtilizationBase(user, week) {
+  if (!user || !week || user.status !== 'active') return false;
+  if (UTIL_BASE_EXCLUDED_USER_IDS.has(user.id)) return false;
+  if (user.id === 'u001' && week.friday >= new Date(2026, 3, 1)) return false;
+  const joined = parseYMDDate(user.joinedAt);
+  if (joined && week.friday < joined) return false;
+  return true;
+}
+
 // 기준일: 2026-04-20 월요일 = W16
 const TODAY = new Date(2026, 3, 20);
 function currentWeekIdx() { return 15; /* W16 */ }
@@ -471,6 +487,7 @@ window.APP_DATA = {
   LEVELS, LEVEL_COLORS, STATUSES, SALES_PEOPLE, KPI_TARGET,
   TODAY,
   computeUtilization,
+  isUserInUtilizationBase,
   currentWeekIdx,
   fmtMD, fmtYMD,
 };

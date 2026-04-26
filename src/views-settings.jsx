@@ -287,25 +287,16 @@ function UsersSettings({ onNewUser, onEditUser, onDeleteUser, onSaveUser }) {
 }
 
 function SyncSettings() {
-  const [url, setUrl] = useStateS(() => localStorage.getItem('SUPABASE_URL') || '');
-  const [key, setKey] = useStateS(() => localStorage.getItem('SUPABASE_ANON_KEY') || '');
+  const [url] = useStateS(() => window.SUPABASE_URL || '');
+  const [key] = useStateS(() => window.SUPABASE_ANON_KEY || '');
   const [showKey, setShowKey] = useStateS(false);
   const [diagnosing, setDiagnosing] = useStateS(false);
   const [diagResult, setDiagResult] = useStateS(null);
 
   const connected = !!window.__SUPABASE_CONNECTED__;
 
-  const saveAndReload = () => {
-    // trim & 끝 슬래시 제거 (자주 나는 실수 자동 교정)
-    const cleanUrl = url.trim().replace(/\/+$/, '');
-    const cleanKey = key.trim();
-    localStorage.setItem('SUPABASE_URL', cleanUrl);
-    localStorage.setItem('SUPABASE_ANON_KEY', cleanKey);
-    location.reload();
-  };
-
   const clearAndReload = () => {
-    if (!confirm('저장된 Supabase URL/KEY를 지우고 로컬 데모 모드로 돌아갑니다. 계속할까요?')) return;
+    if (!confirm('브라우저에 예전에 저장된 Supabase URL/KEY만 지웁니다. 운영 앱은 배포 설정의 Supabase DB를 계속 사용합니다. 계속할까요?')) return;
     localStorage.removeItem('SUPABASE_URL');
     localStorage.removeItem('SUPABASE_ANON_KEY');
     location.reload();
@@ -323,20 +314,20 @@ function SyncSettings() {
       {/* 현재 연결 상태 */}
       <div className="card">
         <div className="card-header">
-          <div>
-            <div className="card-title">Supabase 연동 상태</div>
-            <div className="card-sub">{connected ? '클라우드 DB와 실시간 동기화 중' : '브라우저 메모리 (로컬 데모)'}</div>
-          </div>
+            <div>
+              <div className="card-title">Supabase 연동 상태</div>
+            <div className="card-sub">{connected ? '클라우드 DB와 실시간 동기화 중' : 'Supabase DB 미연결 - 저장 불가'}</div>
+            </div>
           <div style={{ flex: 1 }}></div>
           {connected ? (
             <span className="badge" style={{ background: 'var(--success) ', color: 'white' }}>
               <span className="badge-dot" style={{ background: 'white' }}></span>연결됨
             </span>
           ) : (
-            <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
-              <span className="badge-dot" style={{ background: 'var(--warn)' }}></span>미연결 / 로컬 데모
-            </span>
-          )}
+              <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
+              <span className="badge-dot" style={{ background: 'var(--warn)' }}></span>미연결 / 저장 불가
+              </span>
+            )}
         </div>
 
         <div style={{ padding: 20 }}>
@@ -346,10 +337,10 @@ function SyncSettings() {
               className="input"
               placeholder="https://xxxxxxxxxx.supabase.co"
               value={url}
-              onChange={e => setUrl(e.target.value)}
+              readOnly
               style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
             />
-            <div className="field-hint">Supabase 대시보드 → Project Settings → API → Project URL</div>
+            <div className="field-hint">운영 모드는 배포된 설정만 사용합니다. 브라우저 저장값은 사용하지 않습니다.</div>
           </div>
 
           <div className="field">
@@ -360,7 +351,7 @@ function SyncSettings() {
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 value={key}
                 type={showKey ? 'text' : 'password'}
-                onChange={e => setKey(e.target.value)}
+                readOnly
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, paddingRight: 50 }}
               />
               <button
@@ -375,16 +366,13 @@ function SyncSettings() {
           </div>
 
           <div className="row gap-8" style={{ marginTop: 12 }}>
-            <button className="btn btn-primary btn-sm" onClick={saveAndReload} disabled={!url || !key}>
-              <Icon name="check" size={13} /> 저장하고 연결하기
-            </button>
             <button className="btn btn-sm" onClick={runDiagnosis} disabled={diagnosing}>
               <Icon name="zap" size={13} /> {diagnosing ? '진단 중…' : '연결 진단'}
             </button>
             <div style={{ flex: 1 }}></div>
             {(localStorage.getItem('SUPABASE_URL') || localStorage.getItem('SUPABASE_ANON_KEY')) && (
               <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clearAndReload}>
-                저장값 삭제
+                예전 브라우저 저장값 삭제
               </button>
             )}
           </div>
@@ -424,19 +412,19 @@ function SyncSettings() {
 }
 
 function SlackSettings() {
-  const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_BOT_TOKEN') || '');
+  const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_SYNC_TOKEN') || '');
   const [wsUrl, setWsUrl] = useStateS(() => localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com');
   const [showToken, setShowToken] = useStateS(false);
-  const saved = !!localStorage.getItem('SLACK_BOT_TOKEN');
+  const saved = !!localStorage.getItem('SLACK_SYNC_TOKEN');
 
   const save = () => {
-    localStorage.setItem('SLACK_BOT_TOKEN', token.trim());
+    localStorage.setItem('SLACK_SYNC_TOKEN', token.trim());
     localStorage.setItem('SLACK_WORKSPACE_URL', wsUrl.trim().replace(/\/+$/, ''));
     alert('저장되었습니다. 영업 파이프라인 → 신규고객 동기화 버튼을 사용할 수 있습니다.');
   };
   const clear = () => {
-    if (!confirm('Slack 토큰을 삭제하시겠습니까?')) return;
-    localStorage.removeItem('SLACK_BOT_TOKEN');
+    if (!confirm('Slack 동기화 토큰을 삭제하시겠습니까?')) return;
+    localStorage.removeItem('SLACK_SYNC_TOKEN');
     localStorage.removeItem('SLACK_WORKSPACE_URL');
     setToken('');
     setWsUrl('https://bigxdata-official.slack.com');
@@ -459,7 +447,7 @@ function SlackSettings() {
             </svg>
             Slack 연동
           </div>
-          <div className="card-sub">봇 토큰으로 SV 채널을 자동 동기화합니다</div>
+          <div className="card-sub">서버 환경변수의 Slack Bot Token을 보호한 상태로 SV 채널을 동기화합니다</div>
         </div>
         <div style={{ flex: 1 }}></div>
         {saved ? (
@@ -474,12 +462,12 @@ function SlackSettings() {
       </div>
       <div style={{ padding: 20 }}>
         <div className="field">
-          <div className="field-label">Bot Token</div>
+          <div className="field-label">동기화 토큰</div>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
               className="input"
               type={showToken ? 'text' : 'password'}
-              placeholder="xoxb-..."
+              placeholder="관리자에게 받은 동기화 토큰"
               value={token}
               onChange={e => setToken(e.target.value)}
               style={{ fontFamily: 'var(--font-mono)', flex: 1 }}
@@ -488,7 +476,7 @@ function SlackSettings() {
               {showToken ? '숨기기' : '보기'}
             </button>
           </div>
-          <div className="field-hint">Slack 앱 → OAuth & Permissions → Bot Token (xoxb-) · 필요 권한: channels:read, groups:read</div>
+          <div className="field-hint">Vercel 환경변수 SLACK_SYNC_TOKEN과 같은 값. Slack Bot Token은 브라우저에 입력하지 않습니다.</div>
         </div>
         <div className="field">
           <div className="field-label">워크스페이스 URL</div>
@@ -527,13 +515,13 @@ async function diagnoseSupabase() {
   }
   add('SDK 로드', 'ok', `@supabase/supabase-js 버전 ${window.supabase?.VERSION || '2.x'} 로드됨`);
 
-  // 2. URL 저장 여부
-  const url = localStorage.getItem('SUPABASE_URL');
+  // 2. 배포 설정 URL 여부
+  const url = window.SUPABASE_URL;
   if (!url) {
-    add('URL 저장', 'fail', 'localStorage에 SUPABASE_URL 없음', '위 URL 필드에 https://xxx.supabase.co 입력 후 "저장하고 연결하기" 누르세요.');
-    return { ok: false, checks, summary: 'URL 미저장' };
+    add('URL 설정', 'fail', '배포 설정에 SUPABASE_URL 없음', 'index.html의 window.SUPABASE_URL 값을 확인하세요.');
+    return { ok: false, checks, summary: 'URL 미설정' };
   }
-  add('URL 저장', 'ok', url);
+  add('URL 설정', 'ok', url);
 
   // 3. URL 포맷 검증
   if (!url.startsWith('https://')) {
@@ -546,13 +534,13 @@ async function diagnoseSupabase() {
     add('URL 포맷', 'ok', '형식 정상');
   }
 
-  // 4. KEY 저장 + role 검증
-  const key = localStorage.getItem('SUPABASE_ANON_KEY');
+  // 4. 배포 설정 KEY + role 검증
+  const key = window.SUPABASE_ANON_KEY;
   if (!key) {
-    add('KEY 저장', 'fail', 'localStorage에 SUPABASE_ANON_KEY 없음', 'KEY 필드 채우고 저장.');
-    return { ok: false, checks, summary: 'KEY 미저장' };
+    add('KEY 설정', 'fail', '배포 설정에 SUPABASE_ANON_KEY 없음', 'index.html의 window.SUPABASE_ANON_KEY 값을 확인하세요.');
+    return { ok: false, checks, summary: 'KEY 미설정' };
   }
-  add('KEY 저장', 'ok', `${key.substring(0, 20)}... (길이 ${key.length})`);
+  add('KEY 설정', 'ok', `${key.substring(0, 20)}... (길이 ${key.length})`);
 
   // JWT payload 디코드해서 role 확인
   try {

@@ -175,13 +175,14 @@ function UserFullYearChart({ data }) {
 
 // ===== 팀 상세 =====
 function TeamDetail({ teamId, onBack, onSelectUser }) {
-  const { USERS, TEAMS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, LEVEL_COLORS } = window.APP_DATA;
+  const { USERS, TEAMS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, LEVEL_COLORS, isUserInUtilizationBase } = window.APP_DATA;
   const team = TEAMS.find(t => t.id === teamId);
   if (!team) return <div className="muted">팀 없음</div>;
   const members = USERS.filter(u => u.team === teamId);
   const active = members.filter(u => u.status === 'active');
   const curIdx = currentWeekIdx();
-  const weekAvg = active.reduce((s, m) => s + computeUtilization(m.id, WEEKS[curIdx].id).value, 0) / (active.length || 1);
+  const baseActive = active.filter(u => isUserInUtilizationBase(u, WEEKS[curIdx]));
+  const weekAvg = baseActive.reduce((s, m) => s + computeUtilization(m.id, WEEKS[curIdx].id).value, 0) / (baseActive.length || 1);
 
   return (
     <div className="col gap-16">
@@ -194,7 +195,7 @@ function TeamDetail({ teamId, onBack, onSelectUser }) {
           <div style={{ width: 52, height: 52, borderRadius: 12, background: team.color, display: 'grid', placeItems: 'center', color: 'white', fontSize: 22, fontWeight: 700 }}>{team.name.charAt(0)}</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>{team.name}</div>
-            <div className="small muted">재직 {active.length}명 · 전체 {members.length}명</div>
+            <div className="small muted">계산 모수 {baseActive.length}명 · 재직 {active.length}명 · 전체 {members.length}명</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="tiny subtle">이번 주 평균</div>

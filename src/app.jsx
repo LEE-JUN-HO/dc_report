@@ -84,16 +84,10 @@ function App() {
     setOverrideOpen(true);
   };
   const saveOverride = async ({ userId, weekId, value, client, note, clear }) => {
-    const { UTIL } = window.APP_DATA;
-    if (!UTIL[userId]) UTIL[userId] = {};
-    if (clear) {
-      delete UTIL[userId][weekId];
-    } else {
-      UTIL[userId][weekId] = { value, client, note };
-    }
+    let savedRow = null;
     if (window.APP_DATA.saveUtilization) {
       try {
-        await window.APP_DATA.saveUtilization(
+        savedRow = await window.APP_DATA.saveUtilization(
           userId, weekId,
           clear ? null : value,
           clear ? null : (client || null),
@@ -102,7 +96,20 @@ function App() {
       } catch (e) {
         console.error('[ResourceHub] 가동률 저장 실패:', e);
         alert('저장 실패: ' + e.message);
+        throw e;
       }
+    }
+
+    const { UTIL } = window.APP_DATA;
+    if (!UTIL[userId]) UTIL[userId] = {};
+    if (clear) {
+      delete UTIL[userId][weekId];
+    } else {
+      UTIL[userId][weekId] = savedRow ? {
+        value: savedRow.value == null ? null : Number(savedRow.value),
+        client: savedRow.client || null,
+        note: savedRow.note || null,
+      } : { value, client, note };
     }
     setDataVersion(v => v + 1);
   };
@@ -239,13 +246,14 @@ function App() {
         </div>
         <div className="content">
           <div className="content-narrow">
-            {view === 'dashboard'   && <DashboardView onNavigate={navigate} />}
-            {view === 'utilization' && <UtilizationView onOverride={openOverride} onSelectUser={(id) => navigate('user', id)} />}
+            {view === 'dashboard'   && <DashboardView onNavigate={navigate} dataVersion={dataVersion} />}
+            {view === 'utilization' && <UtilizationView onOverride={openOverride} onSelectUser={(id) => navigate('user', id)} dataVersion={dataVersion} />}
             {view === 'pipeline'    && <PipelineView
               onProjectClick={(id) => navigate('project', id)}
               onNewProject={openNewProject}
               onEditProject={openEditProject}
               onDataChange={onPipelineDataChange}
+              dataVersion={dataVersion}
             />}
             {view === 'settings'    && <SettingsView
               onNewTeam={openNewTeam}

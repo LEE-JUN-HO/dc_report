@@ -158,27 +158,31 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     }
   };
 
-  const addFromSlack = async (ch) => {
-    const newEntry = {
-      id: 'prj' + String(Date.now()).slice(-6),
-      priority: 1,
-      client: ch.client,
-      kind: 'PJ',
-      status: '예정',
-      sales: '',
-      preSales: null,
-      start: null,
-      end: null,
-      mm: null,
-      members: '',
-      note: '[Slack] ' + ch.svName,
-      slackChannelId: ch.id,
-    };
-    window.APP_DATA.PIPELINE.unshift(newEntry);
-    if (window.APP_DATA.savePipeline) {
-      try { await window.APP_DATA.savePipeline(newEntry); } catch (e) { console.error(e); }
+  const addFromSlack = async (channels) => {
+    const list = Array.isArray(channels) ? channels : [channels];
+    for (const ch of list) {
+      const newEntry = {
+        id: 'prj' + String(Date.now()).slice(-6),
+        priority: 1,
+        client: ch.client,
+        kind: 'PJ',
+        status: '예정',
+        sales: '',
+        preSales: null,
+        start: null,
+        end: null,
+        mm: null,
+        members: '',
+        note: '[Slack] ' + ch.svName,
+        slackChannelId: ch.id,
+      };
+      window.APP_DATA.PIPELINE.unshift(newEntry);
+      if (window.APP_DATA.savePipeline) {
+        try { await window.APP_DATA.savePipeline(newEntry); } catch (e) { console.error(e); }
+      }
     }
-    setSyncResults(prev => prev.filter(c => c.id !== ch.id));
+    const addedIds = new Set(list.map(c => c.id));
+    setSyncResults(prev => prev.filter(c => !addedIds.has(c.id)));
     onDataChange && onDataChange();
   };
 
@@ -435,7 +439,40 @@ function StatusPillInline({ status }) {
 }
 
 function SlackSyncModal({ open, syncing, results, onClose, onAdd }) {
+  const [selected, setSelected] = useStatePipe(new Set());
+  const [adding, setAdding] = useStatePipe(false);
+
+  // results가 바뀌면(새 동기화 실행) 선택 초기화
+  React.useEffect(() => { setSelected(new Set()); }, [results]);
+
   if (!open) return null;
+
+  const allIds = results.map(c => c.id);
+  const allChecked = allIds.length > 0 && allIds.every(id => selected.has(id));
+  const someChecked = allIds.some(id => selected.has(id));
+
+  const toggle = (id) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleAll = () => {
+    setSelected(allChecked ? new Set() : new Set(allIds));
+  };
+
+  const handleAddSelected = async () => {
+    const toAdd = results.filter(c => selected.has(c.id));
+    if (!toAdd.length) return;
+    setAdding(true);
+    try {
+      await onAdd(toAdd);
+      setSelected(new Set());
+    } finally {
+      setAdding(false);
+    }
+  };
+
   return (
     <Modal open={open} onClose={onClose} width={580} title="신규 Slack 채널 동기화">
       {syncing ? (
@@ -450,29 +487,48 @@ function SlackSyncModal({ open, syncing, results, onClose, onAdd }) {
         </div>
       ) : (
         <>
-          <div className="tiny subtle" style={{ marginBottom: 10 }}>
-            파이프라인에 없는 SV 채널 <b>{results.length}개</b> 발견 · 추가하면 '예정' 상태로 등록됩니다
+          {/* 헤더: 전체선택 + 카운트 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8, padding: '0 2px' }}>
+            <input type="checkbox" checked={allChecked} ref={el => { if (el) el.indeterminate = someChecked && !allChecked; }}
+              onChange={toggleAll} style={{ width: 15, height: 15, cursor: 'pointer', accentColor: 'var(--accent-strong)' }} />
+            <span className="tiny subtle">
+              파이프라인에 없는 SV 채널 <b>{results.length}개</b> 발견 · 체크 후 일괄 추가 가능
+            </span>
           </div>
-          <div style={{ maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+
+          {/* 채널 목록 */}
+          <div style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 5 }}>
             {results.map(ch => (
-              <div key={ch.id} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elev)',
+              <div key={ch.id} onClick={() => toggle(ch.id)} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px',
+                borderRadius: 6, border: `1px solid ${selected.has(ch.id) ? 'var(--accent-strong)' : 'var(--border)'}`,
+                background: selected.has(ch.id) ? 'var(--accent-weak)' : 'var(--bg-elev)',
+                cursor: 'pointer',
               }}>
+                <input type="checkbox" checked={selected.has(ch.id)} onChange={() => toggle(ch.id)}
+                  onClick={e => e.stopPropagation()}
+                  style={{ width: 15, height: 15, cursor: 'pointer', flexShrink: 0, accentColor: 'var(--accent-strong)' }} />
                 <a href={ch.slackUrl} target="_blank" rel="noopener noreferrer"
                   onClick={e => e.stopPropagation()} title="Slack에서 채널 열기"
                   style={{ color: '#4A154B', display: 'flex', flexShrink: 0 }}>
-                  <SlackIcon size={18} />
+                  <SlackIcon size={16} />
                 </a>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="small bold" style={{ marginBottom: 2 }}>{ch.client}</div>
+                  <div className="small bold" style={{ marginBottom: 1 }}>{ch.client}</div>
                   <div className="tiny subtle ellipsis">{ch.svName}</div>
                 </div>
-                <button className="btn btn-sm btn-primary" onClick={() => onAdd(ch)} style={{ flexShrink: 0 }}>
-                  파이프라인 추가
-                </button>
               </div>
             ))}
+          </div>
+
+          {/* 푸터: 일괄 추가 버튼 */}
+          <div style={{ marginTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button className="btn btn-sm" onClick={onClose}>닫기</button>
+            <button className="btn btn-sm btn-primary" onClick={handleAddSelected}
+              disabled={selected.size === 0 || adding}
+              style={{ minWidth: 110 }}>
+              {adding ? '추가 중...' : `선택한 ${selected.size}개 추가`}
+            </button>
           </div>
         </>
       )}

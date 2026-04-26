@@ -57,6 +57,7 @@
       start: p.start_date, end: p.end_date,
       mm: p.mm != null ? +p.mm : null,
       members: p.members, note: p.note,
+      slackChannelId: p.slack_channel_id || null,
     }));
 
     Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE });
@@ -85,6 +86,7 @@
         sales: p.sales, pre_sales: p.preSales,
         start_date: p.start || null, end_date: p.end || null, mm: p.mm,
         members: p.members, note: p.note,
+        slack_channel_id: p.slackChannelId || null,
       });
     };
     window.APP_DATA.deletePipeline = async (id) => {

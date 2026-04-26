@@ -408,12 +408,107 @@ function SyncSettings() {
         </a>
       </div>
 
+      {/* Slack 연동 */}
+      <SlackSettings />
+
       {/* Export */}
       <div className="card">
         <div className="card-header"><div className="card-title">Export</div><div className="card-sub">백업 또는 엑셀로 내보내기</div></div>
         <div style={{ padding: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
           <button className="btn" onClick={exportJSON}><Icon name="download" size={14} /> 전체 데이터 JSON</button>
           <button className="btn" onClick={exportCSV}><Icon name="download" size={14} /> 가동률 CSV (엑셀 호환)</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SlackSettings() {
+  const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_BOT_TOKEN') || '');
+  const [wsUrl, setWsUrl] = useStateS(() => localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com');
+  const [showToken, setShowToken] = useStateS(false);
+  const saved = !!localStorage.getItem('SLACK_BOT_TOKEN');
+
+  const save = () => {
+    localStorage.setItem('SLACK_BOT_TOKEN', token.trim());
+    localStorage.setItem('SLACK_WORKSPACE_URL', wsUrl.trim().replace(/\/+$/, ''));
+    alert('저장되었습니다. 영업 파이프라인 → 신규고객 동기화 버튼을 사용할 수 있습니다.');
+  };
+  const clear = () => {
+    if (!confirm('Slack 토큰을 삭제하시겠습니까?')) return;
+    localStorage.removeItem('SLACK_BOT_TOKEN');
+    localStorage.removeItem('SLACK_WORKSPACE_URL');
+    setToken('');
+    setWsUrl('https://bigxdata-official.slack.com');
+  };
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <svg width="16" height="16" viewBox="0 0 54 54" fill="none">
+              <path d="M19.7 30.7a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h4.4v4.4z" fill="#E01E5A"/>
+              <path d="M22 30.7a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v11a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-11z" fill="#E01E5A"/>
+              <path d="M26.4 19.7a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v4.4h-4.4z" fill="#36C5F0"/>
+              <path d="M26.4 22a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-11a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h11z" fill="#36C5F0"/>
+              <path d="M37.4 26.4a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-4.4v-4.4z" fill="#2EB67D"/>
+              <path d="M35.1 26.4a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-11a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v11z" fill="#2EB67D"/>
+              <path d="M30.7 37.4a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-4.4h4.4z" fill="#ECB22E"/>
+              <path d="M30.7 35.1a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h11a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-11z" fill="#ECB22E"/>
+            </svg>
+            Slack 연동
+          </div>
+          <div className="card-sub">봇 토큰으로 SV 채널을 자동 동기화합니다</div>
+        </div>
+        <div style={{ flex: 1 }}></div>
+        {saved ? (
+          <span className="badge" style={{ background: 'var(--success)', color: 'white' }}>
+            <span className="badge-dot" style={{ background: 'white' }}></span>설정됨
+          </span>
+        ) : (
+          <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
+            <span className="badge-dot" style={{ background: 'var(--warn)' }}></span>미설정
+          </span>
+        )}
+      </div>
+      <div style={{ padding: 20 }}>
+        <div className="field">
+          <div className="field-label">Bot Token</div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input
+              className="input"
+              type={showToken ? 'text' : 'password'}
+              placeholder="xoxb-..."
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              style={{ fontFamily: 'var(--font-mono)', flex: 1 }}
+            />
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowToken(v => !v)} style={{ flexShrink: 0 }}>
+              {showToken ? '숨기기' : '보기'}
+            </button>
+          </div>
+          <div className="field-hint">Slack 앱 → OAuth & Permissions → Bot Token (xoxb-) · 필요 권한: channels:read, groups:read</div>
+        </div>
+        <div className="field">
+          <div className="field-label">워크스페이스 URL</div>
+          <input
+            className="input"
+            placeholder="https://yourworkspace.slack.com"
+            value={wsUrl}
+            onChange={e => setWsUrl(e.target.value)}
+          />
+          <div className="field-hint">채널 링크 생성에 사용 · 기본값: https://bigxdata-official.slack.com</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+          <button className="btn btn-primary btn-sm" onClick={save} disabled={!token.trim()}>
+            <Icon name="check" size={13} /> 저장
+          </button>
+          {saved && (
+            <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear}>
+              삭제
+            </button>
+          )}
         </div>
       </div>
     </div>

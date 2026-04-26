@@ -1,6 +1,48 @@
 // 영업 파이프라인 — 인라인 편집 + 상세 모달 + 다중 선택 삭제
 const { useState: useStatePipe, useMemo: useMemoPipe, useRef: useRefPipe } = React;
 
+function SlackIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 54 54" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M19.7 30.7a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h4.4v4.4z" fill="#E01E5A"/>
+      <path d="M22 30.7a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v11a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-11z" fill="#E01E5A"/>
+      <path d="M26.4 19.7a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v4.4h-4.4z" fill="#36C5F0"/>
+      <path d="M26.4 22a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-11a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h11z" fill="#36C5F0"/>
+      <path d="M37.4 26.4a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-4.4v-4.4z" fill="#2EB67D"/>
+      <path d="M35.1 26.4a4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-11a4.4 4.4 0 0 1 4.4-4.4 4.4 4.4 0 0 1 4.4 4.4v11z" fill="#2EB67D"/>
+      <path d="M30.7 37.4a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4 4.4 4.4 0 0 1-4.4-4.4v-4.4h4.4z" fill="#ECB22E"/>
+      <path d="M30.7 35.1a4.4 4.4 0 0 1-4.4-4.4 4.4 4.4 0 0 1 4.4-4.4h11a4.4 4.4 0 0 1 4.4 4.4 4.4 4.4 0 0 1-4.4 4.4h-11z" fill="#ECB22E"/>
+    </svg>
+  );
+}
+
+async function fetchSlackSVChannels(token) {
+  const all = [];
+  let cursor = '';
+  do {
+    const params = new URLSearchParams({ limit: '200', types: 'public_channel,private_channel' });
+    if (cursor) params.set('cursor', cursor);
+    const res = await fetch('https://slack.com/api/conversations.list?' + params, {
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error);
+    all.push(...(data.channels || []));
+    cursor = (data.response_metadata && data.response_metadata.next_cursor) || '';
+  } while (cursor);
+
+  const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
+  return all
+    .filter(ch => /sv\d{2}/i.test(ch.name))
+    .map(ch => {
+      const svIdx = ch.name.toLowerCase().indexOf(':sv');
+      const svName = svIdx >= 0 ? ch.name.slice(svIdx + 1) : ch.name;
+      const client = svName.replace(/^sv\d{2}-/i, '').split('-')[0] || svName;
+      return { id: ch.id, svName, client, slackUrl: wsUrl + '/archives/' + ch.id };
+    });
+}
+
 function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange }) {
   const { PIPELINE, PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE } = window.APP_DATA;
   const [statusFilter, setStatusFilter] = useStatePipe('all');
@@ -12,6 +54,9 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
   const [editDraft, setEditDraft] = useStatePipe(null);
   const [selected, setSelected] = useStatePipe(new Set()); // 다중선택
   const [menuOpenId, setMenuOpenId] = useStatePipe(null);
+  const [syncOpen, setSyncOpen] = useStatePipe(false);
+  const [syncing, setSyncing] = useStatePipe(false);
+  const [syncResults, setSyncResults] = useStatePipe([]);
 
   const filtered = useMemoPipe(() => {
     let list = PIPELINE.slice();
@@ -109,6 +154,48 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     else setSelected(new Set(filtered.map(p => p.id)));
   };
 
+  const doSync = async () => {
+    const token = localStorage.getItem('SLACK_BOT_TOKEN');
+    if (!token) { alert('설정 → 데이터 동기화 탭에서 Slack 봇 토큰을 먼저 입력해주세요.'); return; }
+    setSyncing(true);
+    setSyncOpen(true);
+    setSyncResults([]);
+    try {
+      const existingIds = new Set(PIPELINE.filter(p => p.slackChannelId).map(p => p.slackChannelId));
+      const channels = await fetchSlackSVChannels(token);
+      setSyncResults(channels.filter(ch => !existingIds.has(ch.id)));
+    } catch (e) {
+      alert('Slack 동기화 실패: ' + e.message);
+      setSyncOpen(false);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const addFromSlack = async (ch) => {
+    const newEntry = {
+      id: 'prj' + String(Date.now()).slice(-6),
+      priority: 1,
+      client: ch.client,
+      kind: 'PJ',
+      status: '예정',
+      sales: '',
+      preSales: null,
+      start: null,
+      end: null,
+      mm: null,
+      members: '',
+      note: '[Slack] ' + ch.svName,
+      slackChannelId: ch.id,
+    };
+    window.APP_DATA.PIPELINE.unshift(newEntry);
+    if (window.APP_DATA.savePipeline) {
+      try { await window.APP_DATA.savePipeline(newEntry); } catch (e) { console.error(e); }
+    }
+    setSyncResults(prev => prev.filter(c => c.id !== ch.id));
+    onDataChange && onDataChange();
+  };
+
   return (
     <div className="col gap-16">
       {/* 상태별 요약 카드 */}
@@ -172,6 +259,9 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
           <option value="mm">MM 큰 순</option>
           <option value="priority">우선순위</option>
         </select>
+        <button className="btn btn-sm" onClick={doSync} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <SlackIcon size={13} /> 신규고객 동기화
+        </button>
         <button className="btn btn-primary btn-sm" onClick={onNewProject}>
           <Icon name="plus" size={13} /> 신규 건 추가
         </button>
@@ -223,7 +313,23 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                   <td className="tiny num subtle" onClick={() => onProjectClick(p.id)}>
                     {p.priority === 99 ? '◉' : p.priority === 55 ? '◐' : '○'} {p.priority}
                   </td>
-                  <td onClick={() => onProjectClick(p.id)}><span className="bold small">{p.client}</span></td>
+                  <td onClick={() => onProjectClick(p.id)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="bold small">{p.client}</span>
+                      {p.slackChannelId && (
+                        <a
+                          href={(localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com') + '/archives/' + p.slackChannelId}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          title="Slack 채널 열기"
+                          style={{ color: '#4A154B', display: 'flex', alignItems: 'center', lineHeight: 1, flexShrink: 0 }}
+                        >
+                          <SlackIcon size={12} />
+                        </a>
+                      )}
+                    </div>
+                  </td>
                   <td onClick={() => onProjectClick(p.id)}><span className="badge" style={{ fontSize: 10 }}>{p.kind}</span></td>
                   <td onClick={() => onProjectClick(p.id)}><StatusPillInline status={p.status} /></td>
                   <td className="small" onClick={() => onProjectClick(p.id)}>{p.sales}</td>
@@ -262,6 +368,14 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
         <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 일괄 삭제/상태변경</div>
         <div className="tiny subtle">· 행 끝 <b>⋮</b> 버튼으로 수정/삭제</div>
       </div>
+
+      <SlackSyncModal
+        open={syncOpen}
+        syncing={syncing}
+        results={syncResults}
+        onClose={() => setSyncOpen(false)}
+        onAdd={addFromSlack}
+      />
     </div>
   );
 }
@@ -332,6 +446,52 @@ function StatusPillInline({ status }) {
   return <span className="stage-pill" style={{ background: s.color + '22', color: s.color }}>
     <span className="badge-dot" style={{ background: s.color }}></span>{status}
   </span>;
+}
+
+function SlackSyncModal({ open, syncing, results, onClose, onAdd }) {
+  if (!open) return null;
+  return (
+    <Modal open={open} onClose={onClose} width={580} title="신규 Slack 채널 동기화">
+      {syncing ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'center' }}><SlackIcon size={28} /></div>
+          <div className="small">Slack 채널 목록을 가져오는 중...</div>
+        </div>
+      ) : results.length === 0 ? (
+        <div style={{ padding: '36px 0', textAlign: 'center' }}>
+          <div className="small bold" style={{ marginBottom: 4 }}>새로 추가된 SV 채널이 없습니다</div>
+          <div className="tiny subtle">파이프라인에 없는 채널이 없거나 모두 연결되어 있습니다.</div>
+        </div>
+      ) : (
+        <>
+          <div className="tiny subtle" style={{ marginBottom: 10 }}>
+            파이프라인에 없는 SV 채널 <b>{results.length}개</b> 발견 · 추가하면 '예정' 상태로 등록됩니다
+          </div>
+          <div style={{ maxHeight: 420, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {results.map(ch => (
+              <div key={ch.id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-elev)',
+              }}>
+                <a href={ch.slackUrl} target="_blank" rel="noopener noreferrer"
+                  onClick={e => e.stopPropagation()} title="Slack에서 채널 열기"
+                  style={{ color: '#4A154B', display: 'flex', flexShrink: 0 }}>
+                  <SlackIcon size={18} />
+                </a>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="small bold" style={{ marginBottom: 2 }}>{ch.client}</div>
+                  <div className="tiny subtle ellipsis">{ch.svName}</div>
+                </div>
+                <button className="btn btn-sm btn-primary" onClick={() => onAdd(ch)} style={{ flexShrink: 0 }}>
+                  파이프라인 추가
+                </button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </Modal>
+  );
 }
 
 Object.assign(window, { PipelineView });

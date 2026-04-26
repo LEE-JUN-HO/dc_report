@@ -76,13 +76,26 @@ function App() {
     setOverrideParams({ userId, weekId, current });
     setOverrideOpen(true);
   };
-  const saveOverride = ({ userId, weekId, value, client, note, clear }) => {
+  const saveOverride = async ({ userId, weekId, value, client, note, clear }) => {
     const { UTIL } = window.APP_DATA;
     if (!UTIL[userId]) UTIL[userId] = {};
     if (clear) {
       delete UTIL[userId][weekId];
     } else {
       UTIL[userId][weekId] = { value, client, note };
+    }
+    if (window.APP_DATA.saveUtilization) {
+      try {
+        await window.APP_DATA.saveUtilization(
+          userId, weekId,
+          clear ? null : value,
+          clear ? null : (client || null),
+          clear ? null : (note || null),
+        );
+      } catch (e) {
+        console.error('[ResourceHub] 가동률 저장 실패:', e);
+        alert('저장 실패: ' + e.message);
+      }
     }
     setDataVersion(v => v + 1);
   };

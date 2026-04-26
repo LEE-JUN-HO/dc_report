@@ -481,7 +481,9 @@ const PIPELINE = [
 
 // ===== 가동률 조회 =====
 function computeUtilization(userId, weekId) {
-  const u = UTIL[userId] || {};
+  // window.APP_DATA.UTIL 우선 — Supabase 어댑터가 객체를 교체한 경우도 대응
+  const utilMap = (window.APP_DATA && window.APP_DATA.UTIL) ? window.APP_DATA.UTIL : UTIL;
+  const u = utilMap[userId] || {};
   const cell = u[weekId];
   if (!cell) return { value: 0, client: null, note: null, empty: true };
   return {

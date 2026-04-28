@@ -61,14 +61,16 @@ function DashboardView({ onNavigate, dataVersion }) {
   }, [dataVersion]);
 
   const alerts = useMemoDash(() => {
-    const over = [], under = [], onLeave = [];
+    const free = [], under = [], onLeave = [];
     currentBaseUsers.forEach(u => {
       const d = computeUtilization(u.id, currentWeek.id);
-      if (d.value > 1.0) over.push({ user: u, value: d.value });
-      else if (d.note && !d.client) onLeave.push({ user: u, note: d.note });
+      const isLeave = !!d.note && !d.client;
+      const isFree = d.hasValue && Number(d.value) === 0 && !isLeave;
+      if (isFree) free.push({ user: u, value: d.value, client: d.client, note: d.note });
+      else if (isLeave) onLeave.push({ user: u, note: d.note });
       else if (d.value < 0.5) under.push({ user: u, value: d.value });
     });
-    return { over, under, onLeave };
+    return { free, under, onLeave };
   }, [dataVersion]);
 
   const pipelineStats = useMemoDash(() => {
@@ -91,8 +93,8 @@ function DashboardView({ onNavigate, dataVersion }) {
     monthAvg: `${currentWeek.month}월에 속한 주차별 계산 모수 대상자의 가동률을 모두 평균한 값입니다. 아래 Q/H 값도 같은 방식으로 분기와 반기 범위를 넓혀 계산합니다.`,
     headcount: `재직 / 전체는 사용자 데이터에서 status가 active인 인원과 전체 등록 인원을 비교합니다. 팀 수, 퇴사, 휴직 인원은 사용자 데이터의 현재 상태값 기준입니다.`,
     pipeline: `영업 파이프라인에 등록된 전체 건수와 예상 공수 합계입니다. 예상 공수는 각 건의 MM 값을 합산하며, 확정/예정/완료 건수는 진행상태 기준입니다.`,
-    over: `${currentWeek.label} 계산 모수 대상자 중 가동률이 100%를 초과한 인원입니다.`,
-    under: `${currentWeek.label} 계산 모수 대상자 중 휴가/교육 등 부재 사유가 없고 가동률이 50% 미만인 인원입니다.`,
+    free: `${currentWeek.label} 계산 모수 대상자 중 해당 주차 빌링 비율이 명시적으로 0으로 입력된 인원입니다. 휴가/교육 등 부재 사유만 있는 인원은 부재로 분류합니다.`,
+    under: `${currentWeek.label} 계산 모수 대상자 중 휴가/교육 등 부재 사유가 없고, 무상투입도 아니며, 가동률이 50% 미만인 인원입니다.`,
     leave: `${currentWeek.label} 계산 모수 대상자 중 프로젝트 고객사는 없고 휴가/교육 등 부재 사유가 입력된 인원입니다.`,
   };
 
@@ -129,11 +131,11 @@ function DashboardView({ onNavigate, dataVersion }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 14 }}>
         <AlertCard
-          title="과부하"
-          iconBg="var(--danger-weak)" iconColor="var(--danger)"
-          help={helpTexts.over}
-          count={alerts.over.length} subtitle=">100%"
-          items={alerts.over.slice(0, 3).map(a => ({ name: a.user.name, meta: `${(a.value*100).toFixed(0)}%`, color: 'var(--danger)', userId: a.user.id }))}
+          title="무상투입"
+          iconBg="var(--accent-weak)" iconColor="var(--accent)"
+          help={helpTexts.free}
+          count={alerts.free.length} subtitle="빌링 0%"
+          items={alerts.free.slice(0, 3).map(a => ({ name: a.user.name, meta: a.client || a.note || '0%', color: 'var(--accent)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
         <AlertCard

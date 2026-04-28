@@ -82,6 +82,7 @@ create table pipeline (
   start_date  date,
   end_date    date,
   mm          numeric(5,2),                  -- Man-Month
+  win_probability numeric(5,2) check (win_probability is null or (win_probability >= 0 and win_probability <= 100)),
   members     text,                          -- 자유 텍스트 '허순구, 김진규 × 2명'
   note        text,
   slack_channel_id text unique,              -- Slack SV 채널 ID (optional)
@@ -90,6 +91,7 @@ create table pipeline (
 );
 create index pipeline_status_idx on pipeline(status);
 create index pipeline_sales_idx  on pipeline(sales);
+create index pipeline_win_probability_idx on pipeline(win_probability);
 create index pipeline_slack_channel_idx on pipeline(slack_channel_id);
 
 -- ============================================================

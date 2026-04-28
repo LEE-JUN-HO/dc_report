@@ -223,6 +223,7 @@
     <li><code>SLACK_SYNC_TOKEN</code>: Resource Hub 관리자만 아는 임의의 긴 문자열</li>
   </ul>
   <p>앱에서는 <b>설정 → 데이터 동기화 → Slack 연동</b>에 <code>SLACK_SYNC_TOKEN</code>만 입력합니다.</p>
+  <p><b>401 오류</b>가 뜨면 Slack Bot Token 문제가 아니라, 앱에 입력한 동기화 토큰과 Vercel의 <code>SLACK_SYNC_TOKEN</code> 값이 서로 다른 상태입니다. 두 값을 같은 문자열로 맞춘 뒤 다시 배포하세요.</p>
   <div class="callout danger">
     <b>주의:</b> <code>SLACK_BOT_TOKEN</code>은 절대 브라우저, localStorage, 문서, 채팅에 붙여넣지 마세요.
     앱은 동기화 토큰이 맞을 때만 서버에서 SV 채널 목록을 가져옵니다.

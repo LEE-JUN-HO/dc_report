@@ -415,6 +415,8 @@ function SlackSettings() {
   const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_SYNC_TOKEN') || '');
   const [wsUrl, setWsUrl] = useStateS(() => localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com');
   const [showToken, setShowToken] = useStateS(false);
+  const [testing, setTesting] = useStateS(false);
+  const [testResult, setTestResult] = useStateS(null);
   const saved = !!localStorage.getItem('SLACK_SYNC_TOKEN');
 
   const save = () => {
@@ -428,6 +430,33 @@ function SlackSettings() {
     localStorage.removeItem('SLACK_WORKSPACE_URL');
     setToken('');
     setWsUrl('https://bigxdata-official.slack.com');
+    setTestResult(null);
+  };
+  const testConnection = async () => {
+    const cleanToken = token.trim();
+    if (!cleanToken) {
+      setTestResult({ ok: false, message: '동기화 토큰을 먼저 입력해주세요.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/slack-channels', {
+        headers: { 'X-Resource-Hub-Token': cleanToken },
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch {}
+      if (res.ok && data?.ok) {
+        setTestResult({ ok: true, message: `연결 성공 · SV 채널 ${data.channels?.length || 0}개 확인` });
+      } else {
+        setTestResult({ ok: false, message: formatSlackSettingsError(data?.error, res.status, data?.detail || text) });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, message: '네트워크 오류: ' + e.message });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -492,15 +521,42 @@ function SlackSettings() {
           <button className="btn btn-primary btn-sm" onClick={save} disabled={!token.trim()}>
             <Icon name="check" size={13} /> 저장
           </button>
+          <button className="btn btn-sm" onClick={testConnection} disabled={testing || !token.trim()}>
+            <Icon name="zap" size={13} /> {testing ? '테스트 중...' : '연결 테스트'}
+          </button>
           {saved && (
             <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear}>
               삭제
             </button>
           )}
         </div>
+        {testResult && (
+          <div style={{
+            marginTop: 10,
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: testResult.ok ? 'var(--success-weak)' : 'var(--danger-weak)',
+            color: testResult.ok ? 'var(--success)' : 'var(--danger)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}>
+            {testResult.message}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function formatSlackSettingsError(error, status, detail) {
+  const messages = {
+    missing_slack_bot_token: '서버에 SLACK_BOT_TOKEN 환경변수가 없습니다.',
+    missing_slack_sync_token: '서버에 SLACK_SYNC_TOKEN 환경변수가 없습니다.',
+    invalid_sync_token: '동기화 토큰이 일치하지 않습니다. Vercel의 SLACK_SYNC_TOKEN과 앱에 입력한 값이 같아야 합니다.',
+    slack_fetch_failed: 'Slack API 호출 실패입니다. SLACK_BOT_TOKEN 값 또는 Slack 앱 권한을 확인해주세요.',
+  };
+  const base = messages[error] || `HTTP ${status}`;
+  return detail ? `${base} (${detail})` : base;
 }
 
 // ===== 진단 로직 =====

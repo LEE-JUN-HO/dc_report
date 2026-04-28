@@ -145,7 +145,7 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
   const emptyForm = {
     priority: 99, client: '', kind: 'PJ', status: '예정', sales: '',
     preSales: '', start: '2026-06-01', end: '2026-08-31', mm: null,
-    members: '', note: '',
+    winProbability: null, members: '', note: '',
   };
   const [form, setForm] = useStateM(emptyForm);
 
@@ -157,9 +157,15 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
   }, [open, initialProject?.id]);
 
   const update = (k, v) => setForm({ ...form, [k]: v });
+  const clampProbability = (v) => {
+    if (v === '' || v == null) return null;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return Math.max(0, Math.min(100, n));
+  };
   const save = () => {
     const id = form.id || ('prj' + String(Date.now()).slice(-6));
-    onSave({ ...form, id }, isEdit);
+    onSave({ ...form, id, winProbability: clampProbability(form.winProbability) }, isEdit);
     onClose();
   };
   const handleDelete = () => {
@@ -218,6 +224,11 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
             <option value={1}>○ 1 (일반)</option>
           </select>
         </div>
+        <div className="field"><div className="field-label">수주확률 (%)</div>
+          <input className="input" type="number" min="0" max="100" step="1" value={form.winProbability ?? ''} onChange={e => update('winProbability', clampProbability(e.target.value))} placeholder="0~100" />
+          <div className="field-hint">100%는 영업 파이프라인 목록에서 기본 제외됩니다.</div>
+        </div>
+        <div></div>
         <div className="field" style={{ gridColumn: 'span 2' }}>
           <div className="field-label">투입 예상 인원</div>
           <input className="input" value={form.members} onChange={e => update('members', e.target.value)} placeholder="예: 허순구, 김진규 × 2명" />

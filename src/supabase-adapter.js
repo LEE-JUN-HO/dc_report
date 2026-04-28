@@ -71,6 +71,7 @@
       sales: p.sales, preSales: p.pre_sales,
       start: p.start_date, end: p.end_date,
       mm: p.mm != null ? +p.mm : null,
+      winProbability: p.win_probability != null ? +p.win_probability : null,
       members: p.members, note: p.note,
       slackChannelId: p.slack_channel_id || null,
     }));
@@ -145,6 +146,7 @@
           id: p.id, priority: p.priority || 99, client: p.client, kind: p.kind || 'PJ', status: p.status,
           sales: p.sales, pre_sales: p.preSales,
           start_date: p.start || null, end_date: p.end || null, mm: p.mm,
+          win_probability: p.winProbability == null ? null : Math.max(0, Math.min(100, Number(p.winProbability))),
           members: p.members, note: p.note,
           slack_channel_id: p.slackChannelId || null,
         }),

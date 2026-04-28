@@ -267,11 +267,13 @@ function ProjectDetail({ projectId, onBack, onEdit, onDelete }) {
           <span className="stage-pill" style={{ background: getStatusColor(p.status) + '22', color: getStatusColor(p.status) }}>
             <span className="badge-dot" style={{ background: getStatusColor(p.status) }}></span>{p.status}
           </span>
+          <span className="badge">수주확률 {p.winProbability == null ? '—' : Math.max(0, Math.min(100, Number(p.winProbability))).toFixed(0) + '%'}</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginTop: 20 }}>
           <DetailStat label="기간" value={p.start && p.end ? `${p.start.slice(5)} → ${p.end.slice(5)}` : (p.start?.slice(5) || '미정')} />
           <DetailStat label="MM" value={p.mm != null ? p.mm + 'MM' : '미정'} />
+          <DetailStat label="수주확률" value={p.winProbability == null ? '미정' : Math.max(0, Math.min(100, Number(p.winProbability))).toFixed(0) + '%'} />
           <DetailStat label="Sales" value={p.sales || '—'} />
           <DetailStat label="Pre-Sales" value={p.preSales || '—'} />
         </div>

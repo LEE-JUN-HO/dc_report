@@ -11,7 +11,10 @@ function sendJson(res, status, body) {
 }
 
 function getRequestToken(req) {
-  return String(req.headers['x-resource-hub-token'] || '').trim();
+  const headerToken = String(req.headers['x-resource-hub-token'] || '').trim();
+  const auth = String(req.headers.authorization || '').trim();
+  const bearerToken = auth.toLowerCase().startsWith('bearer ') ? auth.slice(7).trim() : '';
+  return headerToken || bearerToken;
 }
 
 function assertConfigured(req) {
@@ -25,7 +28,7 @@ function assertConfigured(req) {
     return { ok: false, status: 503, error: 'missing_slack_sync_token' };
   }
   if (getRequestToken(req) !== syncToken) {
-    return { ok: false, status: 401, error: 'invalid_sync_token' };
+    return { ok: false, status: 401, error: 'invalid_sync_token', detail: 'SLACK_SYNC_TOKEN mismatch' };
   }
   return { ok: true, slackToken };
 }
@@ -59,7 +62,7 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'method_not_allowed' });
 
   const config = assertConfigured(req);
-  if (!config.ok) return sendJson(res, config.status, { ok: false, error: config.error });
+  if (!config.ok) return sendJson(res, config.status, { ok: false, error: config.error, detail: config.detail || null });
 
   try {
     const channels = await fetchSlackChannels(config.slackToken);
@@ -69,6 +72,6 @@ module.exports = async function handler(req, res) {
 
     return sendJson(res, 200, { ok: true, channels: svChannels });
   } catch (error) {
-    return sendJson(res, 502, { ok: false, error: error.message || 'slack_fetch_failed' });
+    return sendJson(res, 502, { ok: false, error: 'slack_fetch_failed', detail: error.message || null });
   }
 };

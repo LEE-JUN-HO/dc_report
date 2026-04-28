@@ -120,14 +120,20 @@ function App() {
   };
   const savePipelineEntry = async (p, isEdit) => {
     const { PIPELINE } = window.APP_DATA;
+    const clean = {
+      ...p,
+      winProbability: p.winProbability == null || p.winProbability === ''
+        ? null
+        : Math.max(0, Math.min(100, Number(p.winProbability))),
+    };
     if (isEdit) {
-      const idx = PIPELINE.findIndex(x => x.id === p.id);
-      if (idx >= 0) PIPELINE[idx] = p;
+      const idx = PIPELINE.findIndex(x => x.id === clean.id);
+      if (idx >= 0) PIPELINE[idx] = clean;
     } else {
-      PIPELINE.unshift(p);
+      PIPELINE.unshift(clean);
     }
     if (window.APP_DATA.savePipeline) {
-      try { await window.APP_DATA.savePipeline(p); } catch (e) { console.error(e); alert('파이프라인 저장 실패: ' + e.message); }
+      try { await window.APP_DATA.savePipeline(clean); } catch (e) { console.error(e); alert('파이프라인 저장 실패: ' + e.message); }
     }
     setDataVersion(v => v + 1);
   };

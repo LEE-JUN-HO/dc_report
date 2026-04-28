@@ -85,10 +85,11 @@ function StagePill({ stageId }) {
 }
 
 // ===== Modal =====
-function Modal({ open, onClose, title, children, footer, width }) {
+function Modal({ open, onClose, title, children, footer, width, closeOnBackdrop = false }) {
   if (!open) return null;
+  const handleBackdropClick = closeOnBackdrop ? onClose : undefined;
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop" onClick={handleBackdropClick}>
       <div className="modal" style={width ? { width } : {}} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title">{title}</div>

@@ -94,7 +94,6 @@ function DashboardView({ onNavigate, dataVersion }) {
     over: `${currentWeek.label} 계산 모수 대상자 중 가동률이 100%를 초과한 인원입니다.`,
     under: `${currentWeek.label} 계산 모수 대상자 중 휴가/교육 등 부재 사유가 없고 가동률이 50% 미만인 인원입니다.`,
     leave: `${currentWeek.label} 계산 모수 대상자 중 프로젝트 고객사는 없고 휴가/교육 등 부재 사유가 입력된 인원입니다.`,
-    levels: `현재 재직자로 표시된 인원을 등급별로 집계합니다. 이 구성표에는 가동률 모수 제외 규칙을 적용하지 않습니다.`,
   };
 
   return (
@@ -153,7 +152,7 @@ function DashboardView({ onNavigate, dataVersion }) {
           items={alerts.onLeave.slice(0, 3).map(a => ({ name: a.user.name, meta: a.note.substring(0, 10), color: 'var(--text-muted)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
-        <LevelCard activeUsers={activeUsers} help={helpTexts.levels} />
+        <LevelCard activeUsers={activeUsers} />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, alignItems: 'stretch' }}>
@@ -216,7 +215,7 @@ function DashboardView({ onNavigate, dataVersion }) {
   );
 }
 
-function LevelCard({ activeUsers, help }) {
+function LevelCard({ activeUsers }) {
   const { LEVELS, LEVEL_COLORS } = window.APP_DATA;
   const counts = {};
   LEVELS.forEach(l => counts[l] = 0);
@@ -224,9 +223,7 @@ function LevelCard({ activeUsers, help }) {
   return (
     <div className="card">
       <div style={{ padding: '14px 18px 10px' }}>
-        <div className="small bold" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          등급 구성 <HelpTip text={help} />
-        </div>
+        <div className="small bold">등급 구성</div>
         <div className="tiny subtle">재직자 {activeUsers.length}명</div>
       </div>
       <div style={{ padding: '0 18px 14px' }}>
@@ -277,7 +274,7 @@ function UpcomingProjects({ onClick }) {
 function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, targetHint, help }) {
   const trend = delta != null ? (delta > 0.001 ? 'up' : delta < -0.001 ? 'down' : 'flat') : null;
   return (
-    <div className="kpi">
+    <div className="kpi" style={{ overflow: 'visible' }}>
       <div className="kpi-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span>{label}</span>
         <HelpTip text={help} />
@@ -300,7 +297,7 @@ function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, target
 
 function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick, help }) {
   return (
-    <div className="card">
+    <div className="card" style={{ overflow: 'visible' }}>
       <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
         <div style={{ width: 32, height: 32, borderRadius: 8, background: iconBg, color: iconColor, display: 'grid', placeItems: 'center' }}>
           <Icon name="alert" size={16} />
@@ -332,24 +329,12 @@ function HelpTip({ text }) {
   if (!text) return null;
   return (
     <span
-      title={text}
+      className="help-tip"
+      tabIndex="0"
       aria-label={text}
-      style={{
-        width: 16,
-        height: 16,
-        borderRadius: '50%',
-        border: '1px solid var(--border-strong)',
-        color: 'var(--text-subtle)',
-        display: 'inline-grid',
-        placeItems: 'center',
-        fontSize: 10,
-        fontWeight: 800,
-        lineHeight: 1,
-        cursor: 'help',
-        flex: '0 0 auto',
-      }}
     >
       ?
+      <span className="help-tip-popover" role="tooltip">{text}</span>
     </span>
   );
 }

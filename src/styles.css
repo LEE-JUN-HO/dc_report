@@ -321,6 +321,73 @@ button { font-family: inherit; cursor: pointer; }
   letter-spacing: 0.06em;
   font-weight: 600;
 }
+.help-tip {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  color: var(--text-subtle);
+  background: var(--bg-elev);
+  display: inline-grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: help;
+  flex: 0 0 auto;
+  outline: none;
+  text-transform: none;
+  letter-spacing: 0;
+  z-index: 20;
+}
+.help-tip:hover,
+.help-tip:focus {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+.help-tip-popover {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  width: max-content;
+  max-width: 300px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--text);
+  color: var(--bg-elev);
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: normal;
+  text-align: left;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+  z-index: 80;
+}
+.help-tip-popover::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 8px;
+  height: 8px;
+  border-left: 1px solid var(--border-strong);
+  border-top: 1px solid var(--border-strong);
+  background: var(--text);
+  transform: translateX(-50%) rotate(45deg);
+}
+.help-tip:hover .help-tip-popover,
+.help-tip:focus .help-tip-popover {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
 .kpi-value {
   font-size: 28px;
   font-weight: 700;

@@ -157,6 +157,13 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
   }, [open, initialProject?.id]);
 
   const update = (k, v) => setForm({ ...form, [k]: v });
+  const priorityLabel = (priority) => {
+    const n = Number(priority);
+    if (n === 1) return '최우선';
+    if (n === 55) return '집중';
+    if (n === 99) return '관망';
+    return String(priority ?? '—');
+  };
   const clampProbability = (v) => {
     if (v === '' || v == null) return null;
     const n = Number(v);
@@ -205,9 +212,6 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
           <input className="input" list="sales-dl" value={form.sales} onChange={e => update('sales', e.target.value)} />
           <datalist id="sales-dl">{SALES_PEOPLE.map(s => <option key={s} value={s} />)}</datalist>
         </div>
-        <div className="field"><div className="field-label">Pre-Sales</div>
-          <input className="input" value={form.preSales} onChange={e => update('preSales', e.target.value)} />
-        </div>
         <div className="field"><div className="field-label">시작일</div>
           <input className="input" type="date" value={form.start || ''} onChange={e => update('start', e.target.value)} />
         </div>
@@ -219,9 +223,9 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
         </div>
         <div className="field"><div className="field-label">우선순위</div>
           <select className="select" value={form.priority} onChange={e => update('priority', +e.target.value)}>
-            <option value={99}>◉ 99 (최상위)</option>
-            <option value={55}>◐ 55 (중간)</option>
-            <option value={1}>○ 1 (일반)</option>
+            <option value={1}>{priorityLabel(1)}</option>
+            <option value={55}>{priorityLabel(55)}</option>
+            <option value={99}>{priorityLabel(99)}</option>
           </select>
         </div>
         <div className="field"><div className="field-label">수주확률 (%)</div>

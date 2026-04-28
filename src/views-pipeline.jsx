@@ -70,20 +70,32 @@ function formatWinProbability(value) {
   return n == null ? '—' : `${n.toFixed(n % 1 === 0 ? 0 : 1)}%`;
 }
 
+function priorityLabel(priority) {
+  const n = Number(priority);
+  if (n === 1) return '최우선';
+  if (n === 55) return '집중';
+  if (n === 99) return '관망';
+  return String(priority ?? '—');
+}
+
 function pipelineSearchText(p) {
   return [
-    p.priority, p.client, p.kind, p.status, p.sales, p.preSales,
+    p.priority, priorityLabel(p.priority), p.client, p.kind, p.status, p.sales, p.preSales,
     p.start, p.end, p.mm, p.winProbability, p.members, p.note,
   ].filter(v => v != null).join(' ').toLowerCase();
 }
 
 function getPipelineValue(p, key) {
   if (key === 'winProbability') return normalizeWinProbability(p.winProbability);
+  if (key === 'priorityLabel') return priorityLabel(p.priority);
   return p[key];
 }
 
 function matchesPipelineColumn(p, key, value) {
   const raw = getPipelineValue(p, key);
+  if (key === 'priority') {
+    return String(raw ?? '').includes(value) || priorityLabel(raw).toLowerCase().includes(value);
+  }
   if (['priority', 'mm', 'winProbability'].includes(key)) {
     if (value.startsWith('>=') || value.startsWith('<=')) {
       const n = Number(value.slice(2));
@@ -419,13 +431,12 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
               <th style={{ width: 30 }}>
                 <input type="checkbox" checked={selected.size > 0 && selected.size === filtered.length} onChange={toggleSelectAll} />
               </th>
-              <SortTh label="#" sortKey="priority" sortConfig={sortConfig} onSort={sortBy} width={50} />
+              <SortTh label="우선순위" sortKey="priority" sortConfig={sortConfig} onSort={sortBy} width={82} />
               <SortTh label="고객" sortKey="client" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="구분" sortKey="kind" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="상태" sortKey="status" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="수주확률" sortKey="winProbability" sortConfig={sortConfig} onSort={sortBy} align="right" />
               <SortTh label="Sales" sortKey="sales" sortConfig={sortConfig} onSort={sortBy} />
-              <SortTh label="Pre-Sales" sortKey="preSales" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="시작일" sortKey="start" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="종료일" sortKey="end" sortConfig={sortConfig} onSort={sortBy} />
               <SortTh label="MM" sortKey="mm" sortConfig={sortConfig} onSort={sortBy} align="right" />
@@ -435,13 +446,12 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
             </tr>
             <tr>
               <th></th>
-              <th><ColumnFilter value={columnFilters.priority} onChange={v => setColumnFilter('priority', v)} placeholder="#" /></th>
+              <th><ColumnFilter value={columnFilters.priority} onChange={v => setColumnFilter('priority', v)} placeholder="최우선" /></th>
               <th><ColumnFilter value={columnFilters.client} onChange={v => setColumnFilter('client', v)} placeholder="고객" /></th>
               <th><ColumnSelect value={columnFilters.kind} onChange={v => setColumnFilter('kind', v)} options={PROJECT_KINDS} /></th>
               <th><ColumnSelect value={columnFilters.status} onChange={v => setColumnFilter('status', v)} options={PIPELINE_STAGES.map(s => s.id)} /></th>
               <th><ColumnFilter type="number" value={columnFilters.winProbability} onChange={v => setColumnFilter('winProbability', v)} placeholder="%" /></th>
               <th><ColumnSelect value={columnFilters.sales} onChange={v => setColumnFilter('sales', v)} options={SALES_PEOPLE} /></th>
-              <th><ColumnFilter value={columnFilters.preSales} onChange={v => setColumnFilter('preSales', v)} placeholder="Pre" /></th>
               <th><ColumnFilter value={columnFilters.start} onChange={v => setColumnFilter('start', v)} placeholder="YYYY-MM" /></th>
               <th><ColumnFilter value={columnFilters.end} onChange={v => setColumnFilter('end', v)} placeholder="YYYY-MM" /></th>
               <th><ColumnFilter type="number" value={columnFilters.mm} onChange={v => setColumnFilter('mm', v)} placeholder="MM" /></th>
@@ -471,8 +481,8 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                   <td onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)} />
                   </td>
-                  <td className="tiny num subtle" onClick={() => onProjectClick(p.id)}>
-                    {p.priority === 99 ? '◉' : p.priority === 55 ? '◐' : '○'} {p.priority}
+                  <td className="small bold" onClick={() => onProjectClick(p.id)}>
+                    {priorityLabel(p.priority)}
                   </td>
                   <td onClick={() => onProjectClick(p.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -497,7 +507,6 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                     {formatWinProbability(p.winProbability)}
                   </td>
                   <td className="small" onClick={() => onProjectClick(p.id)}>{p.sales}</td>
-                  <td className="small subtle" onClick={() => onProjectClick(p.id)}>{p.preSales || '—'}</td>
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.start?.slice(5) || '—'}</td>
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.end?.slice(5) || '—'}</td>
                   <td className="small num bold" style={{ textAlign: 'right' }} onClick={() => onProjectClick(p.id)}>{p.mm != null ? p.mm : '—'}</td>
@@ -528,7 +537,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
       </div>
 
       <div className="row gap-12" style={{ paddingLeft: 4 }}>
-        <div className="tiny subtle">◉ 우선순위 99 · ◐ 55 · ○ 1</div>
+        <div className="tiny subtle">우선순위: 최우선(1) · 집중(55) · 관망(99)</div>
         <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 일괄 삭제/상태변경</div>
         <div className="tiny subtle">· 행 끝 <b>⋮</b> 버튼으로 수정/삭제</div>
       </div>
@@ -552,8 +561,10 @@ function InlineEditRow({ draft, onChange, onSave, onCancel, onDelete }) {
     <tr style={{ background: 'var(--accent-weak)' }}>
       <td></td>
       <td>
-        <select style={{ ...inputStyle, width: 54 }} value={draft.priority} onChange={e => onChange('priority', +e.target.value)}>
-          <option value={99}>99</option><option value={55}>55</option><option value={1}>1</option>
+        <select style={{ ...inputStyle, width: 78 }} value={draft.priority} onChange={e => onChange('priority', +e.target.value)}>
+          <option value={1}>최우선</option>
+          <option value={55}>집중</option>
+          <option value={99}>관망</option>
         </select>
       </td>
       <td><input style={inputStyle} value={draft.client || ''} onChange={e => onChange('client', e.target.value)} autoFocus /></td>
@@ -579,7 +590,6 @@ function InlineEditRow({ draft, onChange, onSave, onCancel, onDelete }) {
         />
       </td>
       <td><input style={{ ...inputStyle, width: 60 }} value={draft.sales || ''} onChange={e => onChange('sales', e.target.value)} /></td>
-      <td><input style={{ ...inputStyle, width: 60 }} value={draft.preSales || ''} onChange={e => onChange('preSales', e.target.value)} /></td>
       <td><input type="date" style={{ ...inputStyle, width: 110 }} value={draft.start || ''} onChange={e => onChange('start', e.target.value)} /></td>
       <td><input type="date" style={{ ...inputStyle, width: 110 }} value={draft.end || ''} onChange={e => onChange('end', e.target.value || null)} /></td>
       <td><input type="number" step="0.1" style={{ ...inputStyle, width: 60, textAlign: 'right' }} value={draft.mm ?? ''} onChange={e => onChange('mm', e.target.value === '' ? null : +e.target.value)} /></td>

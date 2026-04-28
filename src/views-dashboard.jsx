@@ -74,20 +74,35 @@ function DashboardView({ onNavigate, dataVersion }) {
   const pipelineStats = useMemoDash(() => {
     const cnt = { '완료': 0, '확정': 0, '예정': 0 };
     const mm  = { '완료': 0, '확정': 0, '예정': 0 };
+    let totalMm = 0;
     PIPELINE.forEach(p => {
       cnt[p.status]++;
-      mm[p.status] += (p.mm || 0);
+      const effort = p.mm || 0;
+      mm[p.status] += effort;
+      totalMm += effort;
     });
-    return { cnt, mm, total: PIPELINE.length };
+    return { cnt, mm, total: PIPELINE.length, totalMm };
   }, [dataVersion]);
 
   const delta = weekAvg - lastWeekAvg;
+  const formatMm = (value) => Number.isInteger(value) ? value.toLocaleString('ko-KR') : value.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+  const helpTexts = {
+    weekAvg: `${currentWeek.label} 기준 계산 모수 대상자의 주간 가동률 평균입니다. 계산 모수는 재직자 중 입사일 이후인 사람만 포함하고, 4월부터 허순구 본부장 및 DX팀 강승일/김서연은 제외합니다. 목표는 85%이며 전주 동일 기준 평균과 비교합니다.`,
+    monthAvg: `${currentWeek.month}월에 속한 주차별 계산 모수 대상자의 가동률을 모두 평균한 값입니다. 아래 Q/H 값도 같은 방식으로 분기와 반기 범위를 넓혀 계산합니다.`,
+    headcount: `재직 / 전체는 사용자 데이터에서 status가 active인 인원과 전체 등록 인원을 비교합니다. 팀 수, 퇴사, 휴직 인원은 사용자 데이터의 현재 상태값 기준입니다.`,
+    pipeline: `영업 파이프라인에 등록된 전체 건수와 예상 공수 합계입니다. 예상 공수는 각 건의 MM 값을 합산하며, 확정/예정/완료 건수는 진행상태 기준입니다.`,
+    over: `${currentWeek.label} 계산 모수 대상자 중 가동률이 100%를 초과한 인원입니다.`,
+    under: `${currentWeek.label} 계산 모수 대상자 중 휴가/교육 등 부재 사유가 없고 가동률이 50% 미만인 인원입니다.`,
+    leave: `${currentWeek.label} 계산 모수 대상자 중 프로젝트 고객사는 없고 휴가/교육 등 부재 사유가 입력된 인원입니다.`,
+    levels: `현재 재직자로 표시된 인원을 등급별로 집계합니다. 이 구성표에는 가동률 모수 제외 규칙을 적용하지 않습니다.`,
+  };
 
   return (
     <div className="col gap-16">
       <div className="kpi-grid">
         <KpiCard
           label="이번 주 전사 가동률"
+          help={helpTexts.weekAvg}
           value={`${(weekAvg * 100).toFixed(1)}`} unit="%"
           delta={delta} deltaLabel="vs 지난 주"
           sparkData={trend.slice(0, 13).map(t => t.value)}
@@ -95,18 +110,21 @@ function DashboardView({ onNavigate, dataVersion }) {
         />
         <KpiCard
           label={`${currentWeek.month}월 평균`}
+          help={helpTexts.monthAvg}
           value={`${(periodAvgs.month * 100).toFixed(1)}`} unit="%"
           sub={`Q${currentWeek.quarter} ${(periodAvgs.quarter * 100).toFixed(1)}% · ${currentWeek.half} ${(periodAvgs.half * 100).toFixed(1)}%`}
         />
         <KpiCard
           label="재직 / 전체"
+          help={helpTexts.headcount}
           value={activeUsers.length} unit={`명 / ${USERS.length}`}
           sub={`${TEAMS.length}개 팀 · 퇴사 ${USERS.filter(u=>u.status==='resigned').length} · 휴직 ${USERS.filter(u=>u.status==='leave').length}`}
         />
         <KpiCard
           label="파이프라인"
+          help={helpTexts.pipeline}
           value={pipelineStats.total} unit="건"
-          sub={`확정 ${pipelineStats.cnt['확정']} · 예정 ${pipelineStats.cnt['예정']} · 완료 ${pipelineStats.cnt['완료']}`}
+          sub={`예상 공수 ${formatMm(pipelineStats.totalMm)} M/M · 확정 ${pipelineStats.cnt['확정']} · 예정 ${pipelineStats.cnt['예정']} · 완료 ${pipelineStats.cnt['완료']}`}
         />
       </div>
 
@@ -114,6 +132,7 @@ function DashboardView({ onNavigate, dataVersion }) {
         <AlertCard
           title="과부하"
           iconBg="var(--danger-weak)" iconColor="var(--danger)"
+          help={helpTexts.over}
           count={alerts.over.length} subtitle=">100%"
           items={alerts.over.slice(0, 3).map(a => ({ name: a.user.name, meta: `${(a.value*100).toFixed(0)}%`, color: 'var(--danger)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
@@ -121,6 +140,7 @@ function DashboardView({ onNavigate, dataVersion }) {
         <AlertCard
           title="저활용"
           iconBg="var(--warn-weak)" iconColor="var(--warn)"
+          help={helpTexts.under}
           count={alerts.under.length} subtitle="<50%"
           items={alerts.under.slice(0, 3).map(a => ({ name: a.user.name, meta: `${(a.value*100).toFixed(0)}%`, color: 'var(--warn)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
@@ -128,15 +148,16 @@ function DashboardView({ onNavigate, dataVersion }) {
         <AlertCard
           title="부재"
           iconBg="var(--bg-sunken)" iconColor="var(--text-muted)"
+          help={helpTexts.leave}
           count={alerts.onLeave.length} subtitle="휴가·교육 등"
           items={alerts.onLeave.slice(0, 3).map(a => ({ name: a.user.name, meta: a.note.substring(0, 10), color: 'var(--text-muted)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
-        <LevelCard activeUsers={activeUsers} />
+        <LevelCard activeUsers={activeUsers} help={helpTexts.levels} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
-        <div className="card">
+      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, alignItems: 'stretch' }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
           <div className="card-header">
             <div>
               <div className="card-title">가동률 트렌드</div>
@@ -146,8 +167,8 @@ function DashboardView({ onNavigate, dataVersion }) {
             <span className="badge"><span className="badge-dot" style={{ background: 'var(--accent)' }}></span>실적</span>
             <span className="badge"><span className="badge-dot" style={{ background: 'var(--text-subtle)' }}></span>계획</span>
           </div>
-          <div style={{ padding: '18px 18px 14px' }}>
-            <TrendChart data={trend} />
+          <div style={{ padding: '18px 18px 14px', flex: 1, minHeight: 300, display: 'flex' }}>
+            <TrendChart data={trend} height={300} />
           </div>
         </div>
         <div className="card">
@@ -195,7 +216,7 @@ function DashboardView({ onNavigate, dataVersion }) {
   );
 }
 
-function LevelCard({ activeUsers }) {
+function LevelCard({ activeUsers, help }) {
   const { LEVELS, LEVEL_COLORS } = window.APP_DATA;
   const counts = {};
   LEVELS.forEach(l => counts[l] = 0);
@@ -203,7 +224,9 @@ function LevelCard({ activeUsers }) {
   return (
     <div className="card">
       <div style={{ padding: '14px 18px 10px' }}>
-        <div className="small bold">등급 구성</div>
+        <div className="small bold" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          등급 구성 <HelpTip text={help} />
+        </div>
         <div className="tiny subtle">재직자 {activeUsers.length}명</div>
       </div>
       <div style={{ padding: '0 18px 14px' }}>
@@ -251,11 +274,14 @@ function UpcomingProjects({ onClick }) {
   );
 }
 
-function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, targetHint }) {
+function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, targetHint, help }) {
   const trend = delta != null ? (delta > 0.001 ? 'up' : delta < -0.001 ? 'down' : 'flat') : null;
   return (
     <div className="kpi">
-      <div className="kpi-label">{label}</div>
+      <div className="kpi-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span>{label}</span>
+        <HelpTip text={help} />
+      </div>
       <div className="kpi-value num">
         {value}<span className="kpi-value-sub">{unit}</span>
       </div>
@@ -272,7 +298,7 @@ function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, target
   );
 }
 
-function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick }) {
+function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick, help }) {
   return (
     <div className="card">
       <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -280,7 +306,9 @@ function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemCli
           <Icon name="alert" size={16} />
         </div>
         <div style={{ flex: 1 }}>
-          <div className="small bold">{title}</div>
+          <div className="small bold" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {title} <HelpTip text={help} />
+          </div>
           <div className="tiny subtle">{subtitle}</div>
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, color: iconColor, lineHeight: 1 }}>{count}</div>
@@ -300,6 +328,32 @@ function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemCli
   );
 }
 
+function HelpTip({ text }) {
+  if (!text) return null;
+  return (
+    <span
+      title={text}
+      aria-label={text}
+      style={{
+        width: 16,
+        height: 16,
+        borderRadius: '50%',
+        border: '1px solid var(--border-strong)',
+        color: 'var(--text-subtle)',
+        display: 'inline-grid',
+        placeItems: 'center',
+        fontSize: 10,
+        fontWeight: 800,
+        lineHeight: 1,
+        cursor: 'help',
+        flex: '0 0 auto',
+      }}
+    >
+      ?
+    </span>
+  );
+}
+
 function StatusPill({ status }) {
   const { PIPELINE_STAGES } = window.APP_DATA;
   const s = PIPELINE_STAGES.find(x => x.id === status);
@@ -309,8 +363,8 @@ function StatusPill({ status }) {
   </span>;
 }
 
-function TrendChart({ data }) {
-  const W = 560, H = 170, PAD = 26;
+function TrendChart({ data, height = 300 }) {
+  const W = 720, H = height, PAD = 30;
   const maxY = 1.1;
   const y = v => H - PAD - (v / maxY) * (H - PAD * 2);
   const x = i => PAD + (i / (data.length - 1)) * (W - PAD * 2);
@@ -318,7 +372,7 @@ function TrendChart({ data }) {
   const futurePts = data.map((d, i) => ({ ...d, _i: i })).filter(d => d.isFuture || d.isCurrent);
   const toPts = arr => arr.map(d => `${x(d._i)},${y(d.value)}`).join(' ');
   return (
-    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none">
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', minHeight: H }}>
       {[0, 0.5, 0.85, 1.0].map(t => (
         <g key={t}>
           <line x1={PAD} x2={W-PAD} y1={y(t)} y2={y(t)} stroke={t === 0.85 ? 'var(--success)' : 'var(--border)'} strokeDasharray={t === 0.85 ? '0' : '3 3'} strokeWidth={t === 0.85 ? 1 : 1} opacity={t === 0.85 ? 0.5 : 0.4} />

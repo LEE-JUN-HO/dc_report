@@ -239,6 +239,13 @@ function ProjectDetail({ projectId, onBack, onEdit, onDelete }) {
   const { PIPELINE } = window.APP_DATA;
   const p = PIPELINE.find(x => x.id === projectId);
   if (!p) return <div className="muted">프로젝트 없음</div>;
+  const priorityLabel = (priority) => {
+    const n = Number(priority);
+    if (n === 1) return '최우선';
+    if (n === 55) return '집중';
+    if (n === 99) return '관망';
+    return String(priority ?? '—');
+  };
 
   return (
     <div className="col gap-16">
@@ -258,7 +265,7 @@ function ProjectDetail({ projectId, onBack, onEdit, onDelete }) {
       <div className="card" style={{ padding: '22px 26px' }}>
         <div className="row gap-12" style={{ marginBottom: 12 }}>
           <span className="tiny subtle">우선순위</span>
-          <span className="num bold small">{p.priority === 99 ? '◉ 99' : p.priority === 55 ? '◐ 55' : '○ ' + p.priority}</span>
+          <span className="bold small">{priorityLabel(p.priority)}</span>
           <span className="tiny subtle" style={{ marginLeft: 14 }}>#{p.id}</span>
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>{p.client}</div>
@@ -270,12 +277,11 @@ function ProjectDetail({ projectId, onBack, onEdit, onDelete }) {
           <span className="badge">수주확률 {p.winProbability == null ? '—' : Math.max(0, Math.min(100, Number(p.winProbability))).toFixed(0) + '%'}</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 14, marginTop: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginTop: 20 }}>
           <DetailStat label="기간" value={p.start && p.end ? `${p.start.slice(5)} → ${p.end.slice(5)}` : (p.start?.slice(5) || '미정')} />
           <DetailStat label="MM" value={p.mm != null ? p.mm + 'MM' : '미정'} />
           <DetailStat label="수주확률" value={p.winProbability == null ? '미정' : Math.max(0, Math.min(100, Number(p.winProbability))).toFixed(0) + '%'} />
           <DetailStat label="Sales" value={p.sales || '—'} />
-          <DetailStat label="Pre-Sales" value={p.preSales || '—'} />
         </div>
 
         <div style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid var(--border)' }}>

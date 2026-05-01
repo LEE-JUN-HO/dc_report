@@ -42,6 +42,8 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
   const [monthOffset, setMonthOffset] = useStateO(0);
   const [cellModalOpen, setCellModalOpen] = useStateO(false);
   const [cellModalParams, setCellModalParams] = useStateO(null);
+  const [sortField, setSortField] = useStateO('name');   // 'company'|'name'|'grade'
+  const [sortDir,   setSortDir]   = useStateO('asc');
 
   const { OUTSOURCING_PARTNERS, MONTHS, TODAY, currentMonthId: getMonthId } = window.APP_DATA;
   const curMonthId = getMonthId(TODAY);
@@ -49,13 +51,16 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
   const safeIdx    = curIdx >= 0 ? curIdx : MONTHS.length - 1;
   const currentMonth = MONTHS[safeIdx];
 
-  const WINDOW_SIZE = 6;
+  // 분기 필터 — 기본값: 당월 기준 분기
+  const [selectedQuarter, setSelectedQuarter] = useStateO(() => currentMonth?.quarter || 1);
+
+  const WINDOW_SIZE = 8;
   const startIdx    = Math.max(0, Math.min(MONTHS.length - WINDOW_SIZE, safeIdx - 2 + monthOffset));
   const visibleMonths = MONTHS.slice(startIdx, startIdx + WINDOW_SIZE);
 
   const summaryStats = useMemoO(() => {
     if (!OUTSOURCING_PARTNERS?.length || !currentMonth) {
-      return { partner: emptyStats(), freelancer: emptyStats(), currentMonth };
+      return { partner: emptyStats(), freelancer: emptyStats(), currentMonth, selectedQuarter };
     }
     const computeTypeStats = (type) => {
       const ps = OUTSOURCING_PARTNERS.filter(p => p.type === type);
@@ -70,7 +75,7 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
         }));
         return { revenue: rev, cost, margin: calcMarginPct(rev, cost) };
       };
-      const qMonths  = MONTHS.filter(m => m.quarter === currentMonth.quarter).map(m => m.id);
+      const qMonths  = MONTHS.filter(m => m.quarter === selectedQuarter).map(m => m.id);
       const yrMonths = MONTHS.map(m => m.id);
       return {
         month:   sumFor([currentMonth.id]),
@@ -82,8 +87,9 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
       partner:    computeTypeStats('partner'),
       freelancer: computeTypeStats('freelancer'),
       currentMonth,
+      selectedQuarter,
     };
-  }, [dataVersion, safeIdx]);
+  }, [dataVersion, safeIdx, selectedQuarter]);
 
   const visiblePartners = useMemoO(() => {
     if (!OUTSOURCING_PARTNERS) return [];
@@ -95,10 +101,24 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
     });
   }, [typeFilter, statusFilter, search, dataVersion]);
 
+  const sortItems = (items) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...items].sort((a, b) => {
+      if (sortField === 'company') return dir * (a.company || '').localeCompare(b.company || '', 'ko');
+      if (sortField === 'grade')   return dir * (a.grade   || '').localeCompare(b.grade   || '', 'ko');
+      return dir * (a.name || '').localeCompare(b.name || '', 'ko');
+    });
+  };
+
+  const onSort = (field) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('asc'); }
+  };
+
   const grouped = useMemoO(() => [
-    { type: 'partner',    label: '파트너',    color: '#6366F1', items: visiblePartners.filter(p => p.type === 'partner')    },
-    { type: 'freelancer', label: '프리랜서',  color: '#F59E0B', items: visiblePartners.filter(p => p.type === 'freelancer') },
-  ].filter(g => g.items.length > 0), [visiblePartners]);
+    { type: 'partner',    label: '파트너',    color: '#6366F1', items: sortItems(visiblePartners.filter(p => p.type === 'partner'))    },
+    { type: 'freelancer', label: '프리랜서',  color: '#F59E0B', items: sortItems(visiblePartners.filter(p => p.type === 'freelancer')) },
+  ].filter(g => g.items.length > 0), [visiblePartners, sortField, sortDir]);
 
   const openCell = (partnerId, monthId) => {
     setCellModalParams({ partnerId, monthId, current: getRecord(partnerId, monthId) });
@@ -124,7 +144,7 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
 
   return (
     <div className="col gap-16">
-      <OutsourcingSummaryBanner stats={summaryStats} />
+      <OutsourcingSummaryBanner stats={summaryStats} selectedQuarter={selectedQuarter} onSelectQuarter={setSelectedQuarter} />
 
       {/* Controls */}
       <div className="card" style={{ padding: '12px 18px' }}>
@@ -182,6 +202,9 @@ function OutsourcingView({ onEditPartner, dataVersion }) {
           onOpenCell={openCell}
           onEditPartner={onEditPartner}
           dataVersion={dataVersion}
+          sortField={sortField}
+          sortDir={sortDir}
+          onSort={onSort}
         />
       ) : (
         <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--text-subtle)' }}>
@@ -213,13 +236,13 @@ function emptyStats() {
 }
 
 // ── Summary Banner ─────────────────────────────────────────────
-function OutsourcingSummaryBanner({ stats }) {
+function OutsourcingSummaryBanner({ stats, selectedQuarter, onSelectQuarter }) {
   const { currentMonth } = stats;
 
   const TypeRow = ({ label, color, data }) => {
     const periods = [
       { label: '당월',  sub: `${currentMonth?.month || '?'}월`,  data: data.month   },
-      { label: '분기',  sub: `Q${currentMonth?.quarter || '?'}`,  data: data.quarter },
+      { label: '분기',  sub: `Q${selectedQuarter}`,              data: data.quarter },
       { label: '연간',  sub: '2026',                              data: data.year    },
     ];
     return (
@@ -276,6 +299,23 @@ function OutsourcingSummaryBanner({ stats }) {
       <div style={{ padding: '10px 18px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
         <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>외주 매출/매입 현황</span>
         <span className="tiny subtle">· 빌링 상태 기준 집계</span>
+        <div style={{ flex: 1 }} />
+        <span className="tiny subtle">분기 선택:</span>
+        <div style={{ display: 'flex', gap: 3 }}>
+          {[1, 2, 3, 4].map(q => (
+            <button
+              key={q}
+              onClick={() => onSelectQuarter(q)}
+              style={{
+                padding: '3px 9px', borderRadius: 6, border: '1px solid',
+                fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                background:   selectedQuarter === q ? 'var(--accent)' : 'var(--bg-elev)',
+                color:        selectedQuarter === q ? 'white'         : 'var(--text-muted)',
+                borderColor:  selectedQuarter === q ? 'var(--accent)' : 'var(--border)',
+              }}
+            >Q{q}</button>
+          ))}
+        </div>
       </div>
       <div style={{ display: 'flex', borderBottom: 'none' }}>
         <TypeRow label="파트너"    color="#6366F1" data={stats.partner}    />
@@ -286,13 +326,25 @@ function OutsourcingSummaryBanner({ stats }) {
   );
 }
 
+// ── 정렬 아이콘 ────────────────────────────────────────────────
+function SortIcon({ field, sortField, sortDir }) {
+  if (sortField !== field) return <span style={{ opacity: 0.25, fontSize: 10 }}>⇅</span>;
+  return <span style={{ fontSize: 10, color: 'var(--accent)' }}>{sortDir === 'asc' ? '↑' : '↓'}</span>;
+}
+
 // ── Table ──────────────────────────────────────────────────────
-function OutsourcingTable({ grouped, months, curMonthId, onOpenCell, onEditPartner, dataVersion }) {
+function OutsourcingTable({ grouped, months, curMonthId, onOpenCell, onEditPartner, dataVersion, sortField, sortDir, onSort }) {
   const COMPANY_W = 120;
   const NAME_W    = 100;
   const GRADE_W   = 56;
-  const CELL_W    = 136;
+  const CELL_W    = 130;
   const cols = `${COMPANY_W}px ${NAME_W}px ${GRADE_W}px repeat(${months.length}, ${CELL_W}px)`;
+
+  const thStyle = (field) => ({
+    padding: '10px 14px', color: 'var(--text-muted)', cursor: 'pointer',
+    userSelect: 'none', display: 'flex', alignItems: 'center', gap: 5,
+    whiteSpace: 'nowrap',
+  });
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'auto' }}>
@@ -300,9 +352,15 @@ function OutsourcingTable({ grouped, months, curMonthId, onOpenCell, onEditPartn
 
         {/* Header */}
         <div style={{ display: 'grid', gridTemplateColumns: cols, position: 'sticky', top: 0, background: 'var(--bg-sunken)', zIndex: 2, borderBottom: '1px solid var(--border)' }}>
-          <div className="tiny bold" style={{ padding: '10px 14px', color: 'var(--text-muted)' }}>회사명</div>
-          <div className="tiny bold" style={{ padding: '10px 8px',  color: 'var(--text-muted)' }}>이름</div>
-          <div className="tiny bold" style={{ padding: '10px 8px',  color: 'var(--text-muted)' }}>등급</div>
+          <div className="tiny bold" style={thStyle('company')} onClick={() => onSort('company')}>
+            회사명 <SortIcon field="company" sortField={sortField} sortDir={sortDir} />
+          </div>
+          <div className="tiny bold" style={thStyle('name')} onClick={() => onSort('name')}>
+            이름 <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
+          </div>
+          <div className="tiny bold" style={{ ...thStyle('grade'), padding: '10px 8px' }} onClick={() => onSort('grade')}>
+            등급 <SortIcon field="grade" sortField={sortField} sortDir={sortDir} />
+          </div>
           {months.map(m => (
             <div key={m.id} style={{
               padding: '8px 10px', textAlign: 'center', borderLeft: '1px solid var(--border)',

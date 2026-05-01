@@ -318,6 +318,9 @@ function App() {
 }
 
 function Sidebar({ view, onNavigate }) {
+  const APP = window.APP_DATA || {};
+  const currentWeek = APP.WEEKS?.[APP.currentWeekIdx?.()];
+  const todayLabel = APP.TODAY && APP.fmtYMD ? APP.fmtYMD(APP.TODAY) : '2026';
   const items = [
     { id: 'dashboard',   label: '대시보드',    icon: 'dashboard' },
     { id: 'utilization', label: '주간 가동률', icon: 'grid' },
@@ -352,7 +355,7 @@ function Sidebar({ view, onNavigate }) {
         </button>
       ))}
       <div className="sidebar-footer">
-        <div>v0.2 · 2026-04-20 (W16)</div>
+        <div>v0.2 · {todayLabel}{currentWeek ? ` (${currentWeek.label})` : ''}</div>
         <div style={{ marginTop: 4 }}>실데이터 반영본</div>
       </div>
     </aside>

@@ -135,9 +135,18 @@ function isUserInUtilizationBase(user, week) {
   return true;
 }
 
-// 기준일: 2026-04-20 월요일 = W16
-const TODAY = new Date(2026, 3, 20);
-function currentWeekIdx() { return 15; /* W16 */ }
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+// 브라우저의 현재 날짜를 기준으로 주차를 계산합니다.
+const TODAY = startOfLocalDay(new Date());
+function currentWeekIdx(date = TODAY) {
+  const firstMonday = startOfLocalDay(WEEKS[0].monday);
+  const target = startOfLocalDay(date);
+  const diffDays = Math.floor((target - firstMonday) / 86400000);
+  return Math.max(0, Math.min(WEEKS.length - 1, Math.floor(diffDays / 7)));
+}
 
 // 주차 범위 헬퍼
 function wRange(from, to) {

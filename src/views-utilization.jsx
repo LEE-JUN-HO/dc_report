@@ -1,6 +1,29 @@
 // 주간 가동률 표 — 실제 데이터 버전
 const { useState: useStateU, useMemo: useMemoU } = React;
 
+const ZERO_BILLING_WORK_COLOR = '#EF3226';
+const ABSENCE_COLOR = '#FFE501';
+
+function isZeroBillingWork(data) {
+  return !!data?.client && data?.hasValue && Number(data.value) === 0;
+}
+
+function isAbsence(data) {
+  return !!data?.note && !data?.client;
+}
+
+function utilizationCellBg(data) {
+  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_COLOR;
+  if (isAbsence(data)) return ABSENCE_COLOR;
+  return heatColor(data?.value);
+}
+
+function utilizationCellTextColor(data) {
+  if (isZeroBillingWork(data)) return 'white';
+  if (isAbsence(data)) return 'var(--text)';
+  return heatTextColor(data?.value);
+}
+
 function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const [layout, setLayout] = useStateU('table');
   const [teamFilter, setTeamFilter] = useStateU('all');
@@ -132,8 +155,12 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
           <span className="tiny">0 → 100%</span>
         </div>
         <div className="heat-legend">
-          <span style={{ width: 6, height: 6, background: 'var(--warn)', borderRadius: '50%', display: 'inline-block' }}></span>
-          <span>휴가/교육 (사유 있음)</span>
+          <span style={{ width: 10, height: 10, background: ZERO_BILLING_WORK_COLOR, borderRadius: 2, display: 'inline-block' }}></span>
+          <span>업무 0%</span>
+        </div>
+        <div className="heat-legend">
+          <span style={{ width: 10, height: 10, background: ABSENCE_COLOR, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
+          <span>부재</span>
         </div>
         <div style={{ flex: 1 }}></div>
         <div className="tiny subtle">총 {visibleUsers.length}명 표시 · 목표 85%</div>
@@ -220,7 +247,7 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
                 </div>
                 {weeks.map(w => {
                   const u_ = computeUtilization(u.id, w.id);
-                  const bg = heatColor(u_.value);
+                  const bg = utilizationCellBg(u_);
                   return <UtilCell key={w.id} data={u_} bg={bg} isCurrent={w.num - 1 === window.APP_DATA.currentWeekIdx()} onClick={() => onOverride(u.id, w.id, u_)} />;
                 })}
               </div>
@@ -240,7 +267,7 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       className={`util-cell ${hasNote ? 'manual' : ''}`}
       style={{
         background: bg,
-        color: heatTextColor(data.value),
+        color: utilizationCellTextColor(data),
         borderLeft: '1px solid var(--border)',
         borderRight: 'none',
         borderBottom: 'none',
@@ -301,9 +328,9 @@ function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride }) {
                   return (
                     <div key={w.id} onClick={() => onOverride(u.id, w.id, d)} style={{
                       height: 30, margin: '0 2px', borderRadius: 5,
-                      background: heatColor(d.value),
+                      background: utilizationCellBg(d),
                       display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 600,
-                      color: heatTextColor(d.value), cursor: 'pointer', position: 'relative',
+                      color: utilizationCellTextColor(d), cursor: 'pointer', position: 'relative',
                     }}>
                       {d.value > 0 ? (d.value * 100).toFixed(0) : d.note ? '·' : ''}
                       {d.note && !d.client && <span style={{ position: 'absolute', top: 2, right: 3, width: 4, height: 4, background: 'var(--warn)', borderRadius: '50%' }}></span>}

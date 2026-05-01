@@ -462,6 +462,37 @@ addUtil('u046', [  // 김서연 (1/19 입사)
   [R(3,4), null, 0, '온보딩'],
 ]);
 
+// ===== 외주 관리 마스터 데이터 =====
+const OUTSOURCING_PARTNER_TYPES  = { partner: '파트너', freelancer: '프리랜서' };
+const OUTSOURCING_GRADES         = ['특급', '고급', '중급', '초급', '해당없음'];
+const OUTSOURCING_CONTRACT_TYPES = ['월정계약', '프로젝트', '시간제', '기타'];
+const OUTSOURCING_PARTNER_STATUSES = {
+  active:   { label: '활성',    color: '#10B981' },
+  inactive: { label: '비활성',  color: '#F59E0B' },
+  ended:    { label: '계약종료', color: '#94A3B8' },
+};
+const OUTSOURCING_PARTNERS = []; // Supabase 로드 후 교체
+const OUTSOURCING_RECORDS  = {}; // { [partnerId]: { [monthId]: { billingStatus, revenue, cost, project, note } } }
+
+// 2026년 1~12월
+const MONTHS = [];
+for (let m = 1; m <= 12; m++) {
+  const mStr = String(m).padStart(2, '0');
+  MONTHS.push({
+    id: `2026-${mStr}`,
+    year: 2026,
+    month: m,
+    quarter: Math.ceil(m / 3),
+    label: `${m}월`,
+    fullLabel: `2026년 ${m}월`,
+  });
+}
+
+function currentMonthId(date) {
+  const d = date || TODAY;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // ===== 영업 파이프라인 =====
 const PIPELINE_STAGES = [
   { id: '완료', color: '#64748B' },
@@ -505,4 +536,13 @@ window.APP_DATA = {
   isUserInUtilizationBase,
   currentWeekIdx,
   fmtMD, fmtYMD,
+  // 외주 관리
+  MONTHS,
+  currentMonthId,
+  OUTSOURCING_PARTNERS,
+  OUTSOURCING_RECORDS,
+  OUTSOURCING_PARTNER_TYPES,
+  OUTSOURCING_GRADES,
+  OUTSOURCING_CONTRACT_TYPES,
+  OUTSOURCING_PARTNER_STATUSES,
 };

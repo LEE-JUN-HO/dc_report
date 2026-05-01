@@ -417,4 +417,164 @@ function generateUserId() {
   return id;
 }
 
-Object.assign(window, { OverrideModal, PipelineModal, TeamModal, UserModal });
+// ===== 파트너 / 프리랜서 모달 =====
+function PartnerModal({ open, initialPartner, onClose, onSave, onDelete }) {
+  const {
+    OUTSOURCING_PARTNER_TYPES,
+    OUTSOURCING_GRADES,
+    OUTSOURCING_CONTRACT_TYPES,
+    OUTSOURCING_PARTNER_STATUSES,
+  } = window.APP_DATA;
+
+  const isEdit = !!initialPartner;
+  const empty = {
+    id: '', type: 'partner', company: '', name: '', grade: '중급',
+    status: 'active', contractType: '월정계약',
+    startDate: '', endDate: '', email: '', note: '',
+  };
+  const [form, setForm] = useStateM(empty);
+  const [saving, setSaving] = useStateM(false);
+
+  React.useEffect(() => {
+    if (open) {
+      setForm(initialPartner ? { ...initialPartner } : { ...empty, id: generatePartnerId() });
+      setSaving(false);
+    }
+  }, [open, initialPartner]);
+
+  if (!open) return null;
+
+  const update = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const save = async () => {
+    if (!form.name.trim()) { alert('이름을 입력해주세요.'); return; }
+    if (saving) return;
+    setSaving(true);
+    try { await onSave(form, isEdit); onClose(); }
+    finally { setSaving(false); }
+  };
+
+  const del = async () => {
+    if (!confirm(`"${form.name}" 님을 삭제하시겠습니까?\n(월별 기록도 함께 삭제됩니다)`)) return;
+    setSaving(true);
+    try { await onDelete(form.id); onClose(); }
+    finally { setSaving(false); }
+  };
+
+  const inputStyle = { padding: '3px 6px', fontSize: 12, border: '1px solid var(--accent)', borderRadius: 4, background: 'white', fontFamily: 'inherit', width: '100%' };
+
+  return (
+    <Modal open={open} onClose={onClose} width={520}
+      title={isEdit ? '외주 인력 수정' : '외주 인력 추가'}
+      footer={(
+        <>
+          {isEdit && <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={del} disabled={saving}>삭제</button>}
+          <div style={{ flex: 1 }}></div>
+          <button className="btn" onClick={onClose}>취소</button>
+          <button className="btn btn-primary" onClick={save} disabled={saving}>
+            {saving ? '저장 중…' : isEdit ? '저장' : '추가'}
+          </button>
+        </>
+      )}
+    >
+      <div style={{ padding: '16px 20px 8px' }}>
+        {/* 구분 & 상태 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <div className="field-label">구분 *</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {Object.entries(OUTSOURCING_PARTNER_TYPES).map(([k, label]) => (
+                <button key={k} className="btn btn-sm"
+                  style={{
+                    flex: 1,
+                    background: form.type === k ? 'var(--accent)' : 'var(--bg-elev)',
+                    color:      form.type === k ? 'white' : 'var(--text)',
+                    borderColor: form.type === k ? 'var(--accent)' : 'var(--border)',
+                  }}
+                  onClick={() => update('type', k)}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
+            <div className="field-label">상태</div>
+            <select className="select" value={form.status} onChange={e => update('status', e.target.value)}>
+              {Object.entries(OUTSOURCING_PARTNER_STATUSES).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 회사명 & 이름 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <div className="field-label">회사명</div>
+            <input className="input" placeholder="예: (주)ABC솔루션" value={form.company} onChange={e => update('company', e.target.value)} />
+          </div>
+          <div className="field">
+            <div className="field-label">이름 *</div>
+            <input className="input" placeholder="예: 홍길동" value={form.name} onChange={e => update('name', e.target.value)} autoFocus={!isEdit} />
+          </div>
+        </div>
+
+        {/* 등급 & 계약유형 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <div className="field-label">등급</div>
+            <select className="select" value={form.grade} onChange={e => update('grade', e.target.value)}>
+              {OUTSOURCING_GRADES.map(g => <option key={g}>{g}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <div className="field-label">계약유형</div>
+            <select className="select" value={form.contractType || ''} onChange={e => update('contractType', e.target.value)}>
+              <option value="">선택 안 함</option>
+              {OUTSOURCING_CONTRACT_TYPES.map(t => <option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* 계약기간 */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="field">
+            <div className="field-label">계약 시작일</div>
+            <input className="input" type="date" value={form.startDate || ''} onChange={e => update('startDate', e.target.value)} />
+          </div>
+          <div className="field">
+            <div className="field-label">계약 종료일</div>
+            <input className="input" type="date" value={form.endDate || ''} onChange={e => update('endDate', e.target.value)} />
+          </div>
+        </div>
+
+        {/* 이메일 */}
+        <div className="field">
+          <div className="field-label">이메일</div>
+          <input className="input" type="email" placeholder="예: name@company.com" value={form.email || ''} onChange={e => update('email', e.target.value)} />
+        </div>
+
+        {/* 비고 */}
+        <div className="field">
+          <div className="field-label">비고</div>
+          <input className="input" placeholder="특이사항 메모" value={form.note || ''} onChange={e => update('note', e.target.value)} />
+        </div>
+
+        {!isEdit && (
+          <div className="field-hint" style={{ marginTop: 4 }}>ID: {form.id}</div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function generatePartnerId() {
+  const existing = (window.APP_DATA?.OUTSOURCING_PARTNERS || []).map(p => p.id);
+  let n = existing.length + 1;
+  let id;
+  do {
+    id = 'op' + String(n).padStart(3, '0');
+    n++;
+  } while (existing.includes(id));
+  return id;
+}
+
+Object.assign(window, { OverrideModal, PipelineModal, TeamModal, UserModal, PartnerModal });

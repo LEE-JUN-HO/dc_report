@@ -6,13 +6,15 @@ function SettingsView(props) {
   return (
     <div className="col gap-16">
       <div className="segmented" style={{ alignSelf: 'flex-start' }}>
-        <button className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>팀 관리</button>
-        <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
-        <button className={tab === 'sync' ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
+        <button className={tab === 'teams'    ? 'active' : ''} onClick={() => setTab('teams')}>팀 관리</button>
+        <button className={tab === 'users'    ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
+        <button className={tab === 'partners' ? 'active' : ''} onClick={() => setTab('partners')}>외주 관리</button>
+        <button className={tab === 'sync'     ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
       </div>
-      {tab === 'teams' && <TeamsSettings {...props} />}
-      {tab === 'users' && <UsersSettings {...props} />}
-      {tab === 'sync'  && <SyncSettings />}
+      {tab === 'teams'    && <TeamsSettings   {...props} />}
+      {tab === 'users'    && <UsersSettings   {...props} />}
+      {tab === 'partners' && <PartnersSettings {...props} />}
+      {tab === 'sync'     && <SyncSettings />}
     </div>
   );
 }
@@ -772,6 +774,202 @@ function exportCSV() {
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = `utilization-${Date.now()}.csv`; a.click();
+}
+
+// ===== 외주 관리 설정 탭 =====
+function PartnersSettings({ onNewPartner, onEditPartner, onDeletePartner, onSavePartner }) {
+  const {
+    OUTSOURCING_PARTNERS,
+    OUTSOURCING_PARTNER_TYPES,
+    OUTSOURCING_PARTNER_STATUSES,
+    OUTSOURCING_GRADES,
+    LEVEL_COLORS,
+  } = window.APP_DATA;
+
+  const [typeFilter,   setTypeFilter]   = useStateS('all');
+  const [statusFilter, setStatusFilter] = useStateS('active');
+  const [search,       setSearch]       = useStateS('');
+  const [editingId,    setEditingId]    = useStateS(null);
+  const [editDraft,    setEditDraft]    = useStateS(null);
+  const [menuOpenId,   setMenuOpenId]   = useStateS(null);
+
+  const partners = OUTSOURCING_PARTNERS || [];
+
+  // 만료 임박 (30일 이내)
+  const expiring = partners.filter(p => {
+    if (!p.endDate || p.status === 'ended') return false;
+    const diff = (new Date(p.endDate) - new Date()) / 86400000;
+    return diff >= 0 && diff <= 30;
+  });
+
+  const filtered = partners.filter(p => {
+    if (typeFilter !== 'all' && p.type !== typeFilter) return false;
+    if (statusFilter === 'active' && p.status === 'ended') return false;
+    if (search && !p.name.includes(search) && !(p.company || '').includes(search)) return false;
+    return true;
+  });
+
+  const startInline = (p) => { setEditingId(p.id); setEditDraft({ ...p }); setMenuOpenId(null); };
+  const cancelInline = () => { setEditingId(null); setEditDraft(null); };
+  const saveInline = async () => { if (editDraft) { await onSavePartner(editDraft, true); cancelInline(); } };
+
+  const inputStyle = { padding: '3px 6px', fontSize: 12, border: '1px solid var(--accent)', borderRadius: 4, background: 'white', fontFamily: 'inherit', width: '100%' };
+
+  return (
+    <div className="col gap-16">
+      {/* 만료 임박 경고 */}
+      {expiring.length > 0 && (
+        <div style={{ padding: '10px 16px', background: 'var(--warn-weak)', border: '1px solid var(--warn)', borderRadius: 8, display: 'flex', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>⚠</span>
+          <div>
+            <div className="small bold" style={{ color: 'var(--warn)' }}>계약 만료 임박 ({expiring.length}명)</div>
+            <div className="tiny" style={{ color: 'var(--warn)', marginTop: 2 }}>
+              {expiring.map(p => `${p.name} (${p.endDate})`).join(' · ')}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">외주 인력 관리 ({partners.length}명)</div>
+            <div className="card-sub">
+              파트너 {partners.filter(p => p.type === 'partner').length}명 ·
+              프리랜서 {partners.filter(p => p.type === 'freelancer').length}명 ·
+              활성 {partners.filter(p => p.status !== 'ended').length}명
+            </div>
+          </div>
+          <div style={{ flex: 1 }}></div>
+          <input className="input" placeholder="이름/회사 검색" style={{ width: 150 }}
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="select" style={{ width: 'auto' }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="all">전체 구분</option>
+            {Object.entries(OUTSOURCING_PARTNER_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select className="select" style={{ width: 'auto' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="active">활성만</option>
+            <option value="all">전체</option>
+          </select>
+          <button className="btn btn-primary btn-sm" onClick={onNewPartner}><Icon name="plus" size={13} /> 추가</button>
+        </div>
+
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th style={{ width: 60 }}>구분</th>
+              <th style={{ width: 120 }}>회사명</th>
+              <th>이름</th>
+              <th style={{ width: 60 }}>등급</th>
+              <th style={{ width: 80 }}>계약유형</th>
+              <th style={{ width: 80 }}>계약종료</th>
+              <th style={{ width: 60 }}>상태</th>
+              <th>비고</th>
+              <th style={{ width: 40 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => {
+              const typeLabel   = OUTSOURCING_PARTNER_TYPES[p.type] || p.type;
+              const typeColor   = p.type === 'partner' ? '#6366F1' : '#F59E0B';
+              const statusInfo  = OUTSOURCING_PARTNER_STATUSES[p.status];
+              const isEditing   = editingId === p.id;
+              const expSoon     = p.endDate && (new Date(p.endDate) - new Date()) / 86400000 <= 30 && (new Date(p.endDate) - new Date()) / 86400000 >= 0;
+
+              if (isEditing) {
+                return (
+                  <tr key={p.id} style={{ background: 'var(--accent-weak)' }}>
+                    <td>
+                      <select style={{ ...inputStyle, width: 70 }} value={editDraft.type} onChange={e => setEditDraft({ ...editDraft, type: e.target.value })}>
+                        {Object.entries(OUTSOURCING_PARTNER_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={inputStyle} value={editDraft.company || ''} onChange={e => setEditDraft({ ...editDraft, company: e.target.value })} placeholder="회사명" /></td>
+                    <td><input style={{ ...inputStyle }} value={editDraft.name} onChange={e => setEditDraft({ ...editDraft, name: e.target.value })} autoFocus /></td>
+                    <td>
+                      <select style={{ ...inputStyle, width: 65 }} value={editDraft.grade || ''} onChange={e => setEditDraft({ ...editDraft, grade: e.target.value })}>
+                        {OUTSOURCING_GRADES.map(g => <option key={g}>{g}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={{ ...inputStyle, width: 80 }} value={editDraft.contractType || ''} onChange={e => setEditDraft({ ...editDraft, contractType: e.target.value })} /></td>
+                    <td><input style={{ ...inputStyle, width: 110 }} type="date" value={editDraft.endDate || ''} onChange={e => setEditDraft({ ...editDraft, endDate: e.target.value })} /></td>
+                    <td>
+                      <select style={{ ...inputStyle, width: 65 }} value={editDraft.status} onChange={e => setEditDraft({ ...editDraft, status: e.target.value })}>
+                        {Object.entries(OUTSOURCING_PARTNER_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={inputStyle} value={editDraft.note || ''} onChange={e => setEditDraft({ ...editDraft, note: e.target.value })} placeholder="비고" /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-primary btn-sm" style={{ padding: '2px 6px' }} onClick={saveInline}><Icon name="check" size={12} /></button>
+                      <button className="btn btn-sm btn-ghost" style={{ padding: '2px 6px', marginLeft: 2 }} onClick={cancelInline}><Icon name="x" size={12} /></button>
+                    </td>
+                  </tr>
+                );
+              }
+
+              return (
+                <tr key={p.id} style={{ opacity: p.status === 'ended' ? 0.5 : 1 }}>
+                  <td>
+                    <span className="badge" style={{ background: typeColor + '22', color: typeColor, fontSize: 10 }}>{typeLabel}</span>
+                  </td>
+                  <td className="small" style={{ color: 'var(--text-muted)' }}>{p.company || '—'}</td>
+                  <td>
+                    <span className="bold small">{p.name}</span>
+                    {p.email && <span className="tiny subtle" style={{ marginLeft: 6 }}>{p.email}</span>}
+                  </td>
+                  <td>
+                    <span className="small" style={{ color: LEVEL_COLORS?.[p.grade] || 'var(--text-subtle)', fontWeight: 600 }}>
+                      {p.grade || '—'}
+                    </span>
+                  </td>
+                  <td className="tiny subtle">{p.contractType || '—'}</td>
+                  <td>
+                    {p.endDate ? (
+                      <span className="tiny num" style={{ color: expSoon ? 'var(--warn)' : 'var(--text-muted)', fontWeight: expSoon ? 700 : 400 }}>
+                        {expSoon && '⚠ '}{p.endDate}
+                      </span>
+                    ) : <span className="tiny subtle">—</span>}
+                  </td>
+                  <td>
+                    <span className="badge" style={{ background: statusInfo.color + '22', color: statusInfo.color }}>
+                      {statusInfo.label}
+                    </span>
+                  </td>
+                  <td className="tiny subtle ellipsis" style={{ maxWidth: 180 }}>{p.note || ''}</td>
+                  <td style={{ textAlign: 'right', position: 'relative' }}>
+                    <button className="btn btn-sm btn-ghost" style={{ padding: '2px 6px' }}
+                      onClick={() => setMenuOpenId(menuOpenId === p.id ? null : p.id)}>⋮</button>
+                    {menuOpenId === p.id && (
+                      <div style={{ position: 'absolute', top: '100%', right: 8, zIndex: 50, background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow-lg)', minWidth: 180, padding: 4 }}>
+                        <SMenuItem icon="edit" label="빠른 수정 (인라인)" onClick={() => startInline(p)} />
+                        <SMenuItem icon="edit" label="상세 수정" onClick={() => { onEditPartner(p.id); setMenuOpenId(null); }} />
+                        <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }}></div>
+                        <SMenuItem icon="trash" label="삭제" danger
+                          onClick={() => {
+                            if (confirm(`"${p.name}" 님을 삭제하시겠습니까?\n(월별 기록도 함께 삭제됩니다)`)) {
+                              onDeletePartner(p.id);
+                              setMenuOpenId(null);
+                            } else {
+                              setMenuOpenId(null);
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>
+            {partners.length === 0 ? '등록된 외주 인력이 없습니다. 추가 버튼으로 파트너/프리랜서를 등록하세요.' : '조건에 맞는 인원이 없습니다'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 Object.assign(window, { SettingsView });

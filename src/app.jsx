@@ -18,6 +18,8 @@ function App() {
   const [teamEditTarget, setTeamEditTarget] = useState(null);
   const [userModalOpen, setUserModalOpen] = useState(false);
   const [userEditTarget, setUserEditTarget] = useState(null);
+  const [partnerModalOpen, setPartnerModalOpen] = useState(false);
+  const [partnerEditTarget, setPartnerEditTarget] = useState(null);
   const [tweaks, setTweaks] = useState(TWEAK_DEFAULTS);
   const [editModeOn, setEditModeOn] = useState(false);
   const [dataVersion, setDataVersion] = useState(0);
@@ -216,13 +218,48 @@ function App() {
   };
   const onSettingsDataChange = () => setDataVersion(v => v + 1);
 
+  // ===== 외주 인력 CRUD =====
+  const openNewPartner  = () => { setPartnerEditTarget(null); setPartnerModalOpen(true); };
+  const openEditPartner = (id) => {
+    const p = window.APP_DATA.OUTSOURCING_PARTNERS.find(x => x.id === id);
+    if (p) { setPartnerEditTarget({ ...p }); setPartnerModalOpen(true); }
+  };
+  const savePartnerEntry = async (p, isEdit) => {
+    const { OUTSOURCING_PARTNERS } = window.APP_DATA;
+    if (isEdit) {
+      const idx = OUTSOURCING_PARTNERS.findIndex(x => x.id === p.id);
+      if (idx >= 0) OUTSOURCING_PARTNERS[idx] = p;
+    } else {
+      if (OUTSOURCING_PARTNERS.some(x => x.id === p.id)) { alert('이미 존재하는 ID입니다: ' + p.id); return; }
+      OUTSOURCING_PARTNERS.push(p);
+    }
+    if (window.APP_DATA.saveOutsourcingPartner) {
+      try { await window.APP_DATA.saveOutsourcingPartner(p); }
+      catch (e) { console.error(e); alert('저장 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+  const deletePartnerEntry = async (id) => {
+    const { OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS } = window.APP_DATA;
+    const idx = OUTSOURCING_PARTNERS.findIndex(x => x.id === id);
+    if (idx >= 0) OUTSOURCING_PARTNERS.splice(idx, 1);
+    delete OUTSOURCING_RECORDS[id];
+    if (window.APP_DATA.deleteOutsourcingPartner) {
+      try { await window.APP_DATA.deleteOutsourcingPartner(id); }
+      catch (e) { console.error(e); alert('삭제 실패: ' + e.message); }
+    }
+    setDataVersion(v => v + 1);
+  };
+
   const APP = window.APP_DATA || {};
   const pipelineCount = (APP.PIPELINE || []).length;
   const kpiTarget = APP.KPI_TARGET != null ? APP.KPI_TARGET : 0.85;
+  const outsourcingPartnerCount = (APP.OUTSOURCING_PARTNERS || []).filter(p => p.status !== 'ended').length;
   const header = {
     dashboard:   { title: '대시보드',        sub: '경영진 관점 · 실시간 가동 현황' },
     utilization: { title: '주간 가동률',     sub: `팀 × 주차 · 목표 ${(kpiTarget * 100).toFixed(0)}%` },
     pipeline:    { title: '영업 파이프라인', sub: `총 ${pipelineCount}건` },
+    outsourcing: { title: '월간 외주관리',   sub: `파트너·프리랜서 · 활성 ${outsourcingPartnerCount}명` },
     settings:    { title: '설정',            sub: '팀 · 인원 · 동기화' },
     user:        { title: '팀원 상세',       sub: '' },
     team:        { title: '팀 상세',         sub: '' },
@@ -254,6 +291,10 @@ function App() {
           <div className="content-narrow">
             {view === 'dashboard'   && <DashboardView onNavigate={navigate} dataVersion={dataVersion} />}
             {view === 'utilization' && <UtilizationView onOverride={openOverride} onSelectUser={(id) => navigate('user', id)} dataVersion={dataVersion} />}
+            {view === 'outsourcing' && <OutsourcingView
+              onEditPartner={openEditPartner}
+              dataVersion={dataVersion}
+            />}
             {view === 'pipeline'    && <PipelineView
               onProjectClick={(id) => navigate('project', id)}
               onNewProject={openNewProject}
@@ -271,6 +312,10 @@ function App() {
               onSaveUser={saveUserEntry}
               onSaveTeam={saveTeamEntry}
               onDataChange={onSettingsDataChange}
+              onNewPartner={openNewPartner}
+              onEditPartner={openEditPartner}
+              onDeletePartner={deletePartnerEntry}
+              onSavePartner={savePartnerEntry}
             />}
             {view === 'user'    && detailParams && <UserDetail userId={detailParams.id} onBack={() => navigate('utilization')} onProjectClick={(id) => navigate('project', id)} />}
             {view === 'team'    && detailParams && <TeamDetail teamId={detailParams.id} onBack={() => navigate('dashboard')} onSelectUser={(id) => navigate('user', id)} />}
@@ -312,6 +357,14 @@ function App() {
         onDelete={deleteUserEntry}
       />
 
+      <PartnerModal
+        open={partnerModalOpen}
+        initialPartner={partnerEditTarget}
+        onClose={() => setPartnerModalOpen(false)}
+        onSave={savePartnerEntry}
+        onDelete={deletePartnerEntry}
+      />
+
       {editModeOn && <TweaksPanel tweaks={tweaks} onChange={updateTweak} onClose={() => setEditModeOn(false)} />}
     </div>
   );
@@ -322,9 +375,10 @@ function Sidebar({ view, onNavigate }) {
   const currentWeek = APP.WEEKS?.[APP.currentWeekIdx?.()];
   const todayLabel = APP.TODAY && APP.fmtYMD ? APP.fmtYMD(APP.TODAY) : '2026';
   const items = [
-    { id: 'dashboard',   label: '대시보드',    icon: 'dashboard' },
-    { id: 'utilization', label: '주간 가동률', icon: 'grid' },
+    { id: 'dashboard',   label: '대시보드',       icon: 'dashboard' },
+    { id: 'utilization', label: '주간 가동률',     icon: 'grid' },
     { id: 'pipeline',    label: '영업 파이프라인', icon: 'pipeline' },
+    { id: 'outsourcing', label: '월간 외주관리',   icon: 'briefcase' },
   ];
   const items2 = [{ id: 'settings', label: '설정', icon: 'settings' }];
   return (

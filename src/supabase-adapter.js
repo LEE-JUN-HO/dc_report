@@ -44,16 +44,21 @@
       }
     }
 
-    const [tRes, uRes, utRes, pRes] = await Promise.all([
+    const [tRes, uRes, utRes, pRes, opRes, orRes] = await Promise.all([
       client.from('teams').select('*').order('sort_order'),
       client.from('users').select('*').order('id'),
       fetchAllRows('utilization', q => q.order('user_id').order('week_id')),
       client.from('pipeline').select('*').order('priority').order('start_date'),
+      client.from('outsourcing_partners').select('*').order('sort_order').order('id'),
+      fetchAllRows('outsourcing_records', q => q.order('partner_id').order('month_id')),
     ]);
 
     if (tRes.error || uRes.error || utRes.error || pRes.error) {
       throw new Error('쿼리 실패: ' + JSON.stringify([tRes, uRes, utRes, pRes].map(r => r.error?.message).filter(Boolean)));
     }
+    // outsourcing 테이블은 아직 생성 전일 수 있으므로 오류를 무시
+    if (opRes.error) console.warn('[Resource Hub] outsourcing_partners 로드 실패 (마이그레이션 필요):', opRes.error.message);
+    if (orRes.error) console.warn('[Resource Hub] outsourcing_records 로드 실패 (마이그레이션 필요):', orRes.error.message);
 
     const TEAMS = tRes.data.map(t => ({ id: t.id, name: t.name, color: t.color }));
     const USERS = uRes.data.map(u => ({
@@ -76,7 +81,28 @@
       slackChannelId: p.slack_channel_id || null,
     }));
 
-    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE });
+    // 외주 인력 데이터
+    const OUTSOURCING_PARTNERS = opRes.error ? [] : (opRes.data || []).map(p => ({
+      id: p.id, type: p.type, company: p.company, name: p.name,
+      grade: p.grade, status: p.status, contractType: p.contract_type,
+      startDate: p.start_date, endDate: p.end_date, email: p.email,
+      note: p.note, sortOrder: p.sort_order,
+    }));
+    const OUTSOURCING_RECORDS = {};
+    if (!orRes.error) {
+      (orRes.data || []).forEach(row => {
+        if (!OUTSOURCING_RECORDS[row.partner_id]) OUTSOURCING_RECORDS[row.partner_id] = {};
+        OUTSOURCING_RECORDS[row.partner_id][row.month_id] = {
+          billingStatus: row.billing_status,
+          revenue: row.revenue,
+          cost:    row.cost,
+          project: row.project,
+          note:    row.note,
+        };
+      });
+    }
+
+    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS });
     window.APP_DATA.SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
     window.__SUPABASE_CLIENT__ = client;
     window.__SUPABASE_CONNECTED__ = true;
@@ -192,6 +218,47 @@
         'user 삭제'
       );
     };
+    window.APP_DATA.saveOutsourcingPartner = async (p) => {
+      throwIfError(
+        await client.from('outsourcing_partners').upsert({
+          id: p.id, type: p.type, company: p.company || null, name: p.name,
+          grade: p.grade || null, status: p.status || 'active',
+          contract_type: p.contractType || null,
+          start_date: p.startDate || null, end_date: p.endDate || null,
+          email: p.email || null, note: p.note || null,
+          sort_order: p.sortOrder ?? 99,
+        }),
+        'outsourcing_partners 저장'
+      );
+    };
+    window.APP_DATA.deleteOutsourcingPartner = async (id) => {
+      throwIfError(
+        await client.from('outsourcing_partners').delete().eq('id', id),
+        'outsourcing_partners 삭제'
+      );
+    };
+    window.APP_DATA.saveOutsourcingRecord = async (partnerId, monthId, data) => {
+      if (data == null) {
+        throwIfError(
+          await client.from('outsourcing_records').delete().match({ partner_id: partnerId, month_id: monthId }),
+          'outsourcing_records 삭제'
+        );
+      } else {
+        throwIfError(
+          await client.from('outsourcing_records').upsert({
+            partner_id: partnerId,
+            month_id:   monthId,
+            billing_status: data.billingStatus || 'billing',
+            revenue: data.revenue ?? null,
+            cost:    data.cost    ?? null,
+            project: data.project || null,
+            note:    data.note    || null,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'partner_id,month_id' }),
+          'outsourcing_records 저장'
+        );
+      }
+    };
 
     client
       .channel('util-changes')
@@ -199,6 +266,12 @@
         window.dispatchEvent(new CustomEvent('data-changed'));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pipeline' }, () => {
+        window.dispatchEvent(new CustomEvent('data-changed'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'outsourcing_partners' }, () => {
+        window.dispatchEvent(new CustomEvent('data-changed'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'outsourcing_records' }, () => {
         window.dispatchEvent(new CustomEvent('data-changed'));
       })
       .subscribe();

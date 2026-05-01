@@ -183,6 +183,74 @@ function ColumnSelect({ value, onChange, options }) {
   );
 }
 
+function BulkValueControl({ config, value, onChange }) {
+  if (!config) return null;
+  const baseStyle = { width: 'auto', minWidth: config.minWidth || 120, padding: '4px 8px' };
+  if (config.type === 'select') {
+    return (
+      <select className="select btn-sm" style={baseStyle} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">값 선택…</option>
+        {config.options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    );
+  }
+  if (config.type === 'number') {
+    return (
+      <input
+        className="input btn-sm"
+        type="number"
+        min={config.min}
+        max={config.max}
+        step={config.step || 1}
+        placeholder={config.placeholder}
+        style={baseStyle}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    );
+  }
+  if (config.type === 'date') {
+    return (
+      <input
+        className="input btn-sm"
+        type="date"
+        style={baseStyle}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    );
+  }
+  if (config.options?.length) {
+    const listId = `bulk-${config.key}-options`;
+    return (
+      <>
+        <input
+          className="input btn-sm"
+          list={listId}
+          placeholder={config.placeholder}
+          style={baseStyle}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+        />
+        <datalist id={listId}>
+          {config.options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </datalist>
+      </>
+    );
+  }
+  return (
+    <input
+      className="input btn-sm"
+      placeholder={config.placeholder}
+      style={baseStyle}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    />
+  );
+}
+
 function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange, dataVersion }) {
   const { PIPELINE, PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE } = window.APP_DATA;
   const [statusFilter, setStatusFilter] = useStatePipe('all');
@@ -195,6 +263,8 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
   const [editingId, setEditingId] = useStatePipe(null); // 인라인 편집 중인 row id
   const [editDraft, setEditDraft] = useStatePipe(null);
   const [selected, setSelected] = useStatePipe(new Set()); // 다중선택
+  const [bulkField, setBulkField] = useStatePipe('');
+  const [bulkValue, setBulkValue] = useStatePipe('');
   const [menuOpenId, setMenuOpenId] = useStatePipe(null);
   const [syncOpen, setSyncOpen] = useStatePipe(false);
   const [syncing, setSyncing] = useStatePipe(false);
@@ -227,6 +297,32 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     });
     return { byStatus, byKind };
   }, [PIPELINE, dataVersion]);
+
+  const bulkFieldConfigs = useMemoPipe(() => ([
+    {
+      key: 'priority',
+      label: '우선순위',
+      type: 'select',
+      minWidth: 110,
+      options: [
+        { value: '1', label: '최우선' },
+        { value: '55', label: '집중' },
+        { value: '99', label: '관망' },
+      ],
+    },
+    { key: 'client', label: '고객', placeholder: '고객사명', minWidth: 150 },
+    { key: 'kind', label: '구분', type: 'select', minWidth: 96, options: PROJECT_KINDS.map(k => ({ value: k, label: k })) },
+    { key: 'status', label: '상태', type: 'select', minWidth: 96, options: PIPELINE_STAGES.map(s => ({ value: s.id, label: s.id })) },
+    { key: 'winProbability', label: '수주확률', type: 'number', min: 0, max: 100, step: 1, placeholder: '0~100', minWidth: 96 },
+    { key: 'sales', label: 'Sales', placeholder: '담당자명', minWidth: 120, options: SALES_PEOPLE.map(s => ({ value: s, label: s })) },
+    { key: 'start', label: '시작일', type: 'date', minWidth: 132 },
+    { key: 'end', label: '종료일', type: 'date', minWidth: 132 },
+    { key: 'mm', label: 'MM', type: 'number', min: 0, step: 0.1, placeholder: 'MM', minWidth: 88 },
+    { key: 'members', label: '투입 인원', placeholder: '투입 인원', minWidth: 160 },
+    { key: 'note', label: '진행상세', placeholder: '진행상세', minWidth: 180 },
+  ]), [PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE, dataVersion]);
+  const selectedBulkConfig = bulkFieldConfigs.find(f => f.key === bulkField);
+  const canApplyBulk = !!selectedBulkConfig && String(bulkValue).trim() !== '';
 
   // === 편집 action ===
   const startEdit = (p) => {
@@ -278,12 +374,35 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     onDataChange && onDataChange();
   };
 
-  const changeStatusSelected = async (newStatus) => {
+  const normalizeBulkValue = (config, rawValue) => {
+    const raw = String(rawValue).trim();
+    if (!raw) return { ok: false, message: '변경할 값을 입력해주세요.' };
+    if (config.key === 'priority') return { ok: true, value: Number(raw) };
+    if (config.key === 'winProbability') {
+      const n = normalizeWinProbability(raw);
+      if (n == null) return { ok: false, message: '수주확률은 0~100 사이 숫자로 입력해주세요.' };
+      return { ok: true, value: n };
+    }
+    if (config.key === 'mm') {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return { ok: false, message: 'MM은 숫자로 입력해주세요.' };
+      return { ok: true, value: n };
+    }
+    return { ok: true, value: raw };
+  };
+
+  const applyBulkSelected = async () => {
     if (selected.size === 0) return;
+    if (!selectedBulkConfig) return;
+    const normalized = normalizeBulkValue(selectedBulkConfig, bulkValue);
+    if (!normalized.ok) {
+      alert(normalized.message);
+      return;
+    }
     for (const id of selected) {
       const idx = PIPELINE.findIndex(p => p.id === id);
       if (idx >= 0) {
-        PIPELINE[idx].status = newStatus;
+        PIPELINE[idx] = { ...PIPELINE[idx], [selectedBulkConfig.key]: normalized.value };
         if (window.APP_DATA.savePipeline) {
           try { await window.APP_DATA.savePipeline(PIPELINE[idx]); } catch (e) { console.error(e); }
         }
@@ -303,6 +422,11 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
   const toggleSelectAll = () => {
     if (selected.size === filtered.length) setSelected(new Set());
     else setSelected(new Set(filtered.map(p => p.id)));
+  };
+
+  const changeBulkField = (fieldKey) => {
+    setBulkField(fieldKey);
+    setBulkValue('');
   };
 
   const doSync = async () => {
@@ -385,10 +509,14 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
               {selected.size}건 선택됨
             </span>
             <div style={{ width: 1, height: 20, background: 'var(--border)' }}></div>
-            <select className="select btn-sm" style={{ width: 'auto', padding: '4px 8px' }} defaultValue="" onChange={e => { if (e.target.value) { changeStatusSelected(e.target.value); e.target.value=''; } }}>
-              <option value="">상태 일괄 변경…</option>
-              {PIPELINE_STAGES.map(s => <option key={s.id} value={s.id}>→ {s.id}</option>)}
+            <select className="select btn-sm" style={{ width: 'auto', minWidth: 138, padding: '4px 8px' }} value={bulkField} onChange={e => changeBulkField(e.target.value)}>
+              <option value="">변경 컬럼 선택…</option>
+              {bulkFieldConfigs.map(field => <option key={field.key} value={field.key}>{field.label}</option>)}
             </select>
+            <BulkValueControl config={selectedBulkConfig} value={bulkValue} onChange={setBulkValue} />
+            <button className="btn btn-primary btn-sm" onClick={applyBulkSelected} disabled={!canApplyBulk}>
+              일괄 적용
+            </button>
             <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={deleteSelected}>
               <Icon name="trash" size={13} /> 선택 {selected.size}건 삭제
             </button>
@@ -538,7 +666,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
 
       <div className="row gap-12" style={{ paddingLeft: 4 }}>
         <div className="tiny subtle">우선순위: 최우선(1) · 집중(55) · 관망(99)</div>
-        <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 일괄 삭제/상태변경</div>
+        <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 컬럼별 일괄 변경/삭제</div>
         <div className="tiny subtle">· 행 끝 <b>⋮</b> 버튼으로 수정/삭제</div>
       </div>
 

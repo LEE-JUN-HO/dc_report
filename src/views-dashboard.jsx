@@ -1,10 +1,19 @@
 // 대시보드 — 실데이터 버전
 const { useMemo: useMemoDash } = React;
 
+function dashboardWeekPeriodYear(week) { return week?.periodYear ?? week?.year; }
+function dashboardWeekPeriodMonth(week) { return week?.periodMonth ?? week?.month; }
+function dashboardWeekPeriodQuarter(week) { return week?.periodQuarter ?? week?.quarter; }
+function dashboardWeekPeriodHalf(week) { return week?.periodHalf ?? week?.half; }
+
 function DashboardView({ onNavigate, dataVersion }) {
   const { USERS, TEAMS, WEEKS, PIPELINE, computeUtilization, currentWeekIdx, KPI_TARGET, isUserInUtilizationBase } = window.APP_DATA;
   const curIdx = currentWeekIdx();
   const currentWeek = WEEKS[curIdx];
+  const periodYear = dashboardWeekPeriodYear(currentWeek);
+  const periodMonth = dashboardWeekPeriodMonth(currentWeek);
+  const periodQuarter = dashboardWeekPeriodQuarter(currentWeek);
+  const periodHalf = dashboardWeekPeriodHalf(currentWeek);
   const activeUsers = USERS.filter(u => u.status === 'active');
   const currentBaseUsers = USERS.filter(u => isUserInUtilizationBase(u, currentWeek));
 
@@ -34,9 +43,9 @@ function DashboardView({ onNavigate, dataVersion }) {
       return sum / (n || 1);
     };
     return {
-      month:   compute(w => w.month === currentWeek.month),
-      quarter: compute(w => w.quarter === currentWeek.quarter),
-      half:    compute(w => w.half === currentWeek.half),
+      month:   compute(w => dashboardWeekPeriodMonth(w) === periodMonth && dashboardWeekPeriodYear(w) === periodYear),
+      quarter: compute(w => dashboardWeekPeriodQuarter(w) === periodQuarter && dashboardWeekPeriodYear(w) === periodYear),
+      half:    compute(w => dashboardWeekPeriodHalf(w) === periodHalf && dashboardWeekPeriodYear(w) === periodYear),
       year:    compute(() => true),
     };
   }, [dataVersion]);
@@ -90,7 +99,7 @@ function DashboardView({ onNavigate, dataVersion }) {
   const formatMm = (value) => Number.isInteger(value) ? value.toLocaleString('ko-KR') : value.toLocaleString('ko-KR', { maximumFractionDigits: 1 });
   const helpTexts = {
     weekAvg: `${currentWeek.label} 기준 계산 모수 대상자의 주간 가동률 평균입니다. 계산 모수는 재직자 중 입사일 이후인 사람만 포함하고, 4월부터 허순구 본부장 및 DX팀 강승일/김서연은 제외합니다. 목표는 85%이며 전주 동일 기준 평균과 비교합니다.`,
-    monthAvg: `${currentWeek.month}월에 속한 주차별 계산 모수 대상자의 가동률을 모두 평균한 값입니다. 아래 Q/H 값도 같은 방식으로 분기와 반기 범위를 넓혀 계산합니다.`,
+    monthAvg: `${periodMonth}월에 속한 주차별 계산 모수 대상자의 가동률을 모두 평균한 값입니다. 월 구분은 업무주 종료일(금요일)을 기준으로 합니다. 아래 Q/H 값도 같은 방식으로 분기와 반기 범위를 넓혀 계산합니다.`,
     headcount: `재직 / 전체는 사용자 데이터에서 status가 active인 인원과 전체 등록 인원을 비교합니다. 팀 수, 퇴사, 휴직 인원은 사용자 데이터의 현재 상태값 기준입니다.`,
     pipeline: `영업 파이프라인에 등록된 전체 건수와 예상 공수 합계입니다. 예상 공수는 각 건의 MM 값을 합산하며, 확정/예정/완료 건수는 진행상태 기준입니다.`,
     free: `${currentWeek.label} 계산 모수 대상자 중 해당 주차 빌링 비율이 명시적으로 0으로 입력된 인원입니다. 휴가/교육 등 부재 사유만 있는 인원은 부재로 분류합니다.`,
@@ -110,10 +119,10 @@ function DashboardView({ onNavigate, dataVersion }) {
           targetHint={weekAvg < KPI_TARGET ? `목표 85% · ${((KPI_TARGET - weekAvg) * currentBaseUsers.length).toFixed(1)} FTE 미달` : '목표 달성 ✓'}
         />
         <KpiCard
-          label={`${currentWeek.month}월 평균`}
+          label={`${periodMonth}월 평균`}
           help={helpTexts.monthAvg}
           value={`${(periodAvgs.month * 100).toFixed(1)}`} unit="%"
-          sub={`Q${currentWeek.quarter} ${(periodAvgs.quarter * 100).toFixed(1)}% · ${currentWeek.half} ${(periodAvgs.half * 100).toFixed(1)}%`}
+          sub={`Q${periodQuarter} ${(periodAvgs.quarter * 100).toFixed(1)}% · ${periodHalf} ${(periodAvgs.half * 100).toFixed(1)}%`}
         />
         <KpiCard
           label="재직 / 전체"

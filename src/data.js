@@ -105,6 +105,8 @@ for (let i = 1; i <= 53; i++) {
   const m = mondayOfW(i);
   const f = new Date(m); f.setDate(f.getDate() + 4);
   const month = m.getMonth() + 1;
+  const periodYear = f.getFullYear();
+  const periodMonth = f.getMonth() + 1;
   WEEKS.push({
     id: `W${i}`,
     num: i,
@@ -116,6 +118,10 @@ for (let i = 1; i <= 53; i++) {
     month,
     quarter: Math.floor((month - 1) / 3) + 1,
     half: month <= 6 ? 'H1' : 'H2',
+    periodYear,
+    periodMonth,
+    periodQuarter: Math.floor((periodMonth - 1) / 3) + 1,
+    periodHalf: periodMonth <= 6 ? 'H1' : 'H2',
   });
 }
 

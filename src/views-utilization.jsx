@@ -2,7 +2,16 @@
 const { useState: useStateU, useMemo: useMemoU } = React;
 
 const ZERO_BILLING_WORK_COLOR = '#EF3226';
-const ABSENCE_COLOR = '#FFE501';
+const ZERO_BILLING_WORK_BG = '#FEE2E2';
+const ABSENCE_COLOR = '#D97706';
+const ABSENCE_BG = '#FFFBEA';
+const ABSENCE_STRIPE_COLOR = '#FFE501';
+const UNASSIGNED_BG = '#F8FAFC';
+
+function weekPeriodYear(week) { return week?.periodYear ?? week?.year; }
+function weekPeriodMonth(week) { return week?.periodMonth ?? week?.month; }
+function weekPeriodQuarter(week) { return week?.periodQuarter ?? week?.quarter; }
+function weekPeriodHalf(week) { return week?.periodHalf ?? week?.half; }
 
 function isZeroBillingWork(data) {
   return !!data?.client && data?.hasValue && Number(data.value) === 0;
@@ -12,16 +21,39 @@ function isAbsence(data) {
   return !!data?.note && !data?.client;
 }
 
+function isUnassigned(data) {
+  return !data?.client && !data?.note && Number(data?.value || 0) === 0;
+}
+
 function utilizationCellBg(data) {
-  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_COLOR;
-  if (isAbsence(data)) return ABSENCE_COLOR;
+  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_BG;
+  if (isAbsence(data)) {
+    return `repeating-linear-gradient(135deg, ${ABSENCE_BG} 0 7px, ${ABSENCE_STRIPE_COLOR} 7px 10px, ${ABSENCE_BG} 10px 16px)`;
+  }
+  if (isUnassigned(data)) return UNASSIGNED_BG;
   return heatColor(data?.value);
 }
 
 function utilizationCellTextColor(data) {
-  if (isZeroBillingWork(data)) return 'white';
-  if (isAbsence(data)) return 'var(--text)';
+  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_COLOR;
+  if (isAbsence(data)) return '#713F12';
+  if (isUnassigned(data)) return 'var(--text-subtle)';
   return heatTextColor(data?.value);
+}
+
+function utilizationCellShadow(data, isCurrent = false) {
+  const shadows = [];
+  if (isCurrent) shadows.push('inset 0 0 0 1px var(--accent)');
+  if (isZeroBillingWork(data)) shadows.push(`inset 3px 0 0 ${ZERO_BILLING_WORK_COLOR}`);
+  if (isAbsence(data)) shadows.push(`inset 0 0 0 1px ${ABSENCE_COLOR}55`);
+  return shadows.length ? shadows.join(', ') : 'none';
+}
+
+function utilizationCellLabel(data, compact = false) {
+  if (isZeroBillingWork(data)) return compact ? '0' : '0.0';
+  if (data?.value > 0) return compact ? (data.value * 100).toFixed(0) : data.value.toFixed(1);
+  if (isAbsence(data)) return '•';
+  return '';
 }
 
 function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
@@ -57,19 +89,24 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
       });
       return { avg: sum / (n || 1), overCount: over, underCount: under };
     };
-    const nm  = currentWeek.month % 12 + 1;
-    const nmY = nm === 1 ? currentWeek.year + 1 : currentWeek.year;
+    const cm = weekPeriodMonth(currentWeek);
+    const cy = weekPeriodYear(currentWeek);
+    const cq = weekPeriodQuarter(currentWeek);
+    const ch = weekPeriodHalf(currentWeek);
+    const nm  = cm % 12 + 1;
+    const nmY = nm === 1 ? cy + 1 : cy;
     const nnm  = nm % 12 + 1;
     const nnmY = nnm === 1 ? nmY + 1 : nmY;
     return {
       userCount: USERS.filter(u => isUserInUtilizationBase(u, currentWeek)).length,
       week:          avgOf(w => w.id === currentWeek.id),
-      month:         avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
-      nextMonth:     avgOf(w => w.month === nm  && w.year === nmY),
-      nextNextMonth: avgOf(w => w.month === nnm && w.year === nnmY),
-      quarter:       avgOf(w => w.quarter === currentWeek.quarter && w.year === currentWeek.year),
-      half:          avgOf(w => w.half === currentWeek.half && w.year === currentWeek.year),
+      month:         avgOf(w => weekPeriodMonth(w) === cm && weekPeriodYear(w) === cy),
+      nextMonth:     avgOf(w => weekPeriodMonth(w) === nm  && weekPeriodYear(w) === nmY),
+      nextNextMonth: avgOf(w => weekPeriodMonth(w) === nnm && weekPeriodYear(w) === nnmY),
+      quarter:       avgOf(w => weekPeriodQuarter(w) === cq && weekPeriodYear(w) === cy),
+      half:          avgOf(w => weekPeriodHalf(w) === ch && weekPeriodYear(w) === cy),
       year:          avgOf(w => w.year === currentWeek.year),
+      periodMeta:         { month: cm, year: cy, quarter: cq, half: ch },
       nextMonthMeta:     { month: nm,  year: nmY },
       nextNextMonthMeta: { month: nnm, year: nnmY },
     };
@@ -148,19 +185,23 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
         <div className="heat-legend">
           <span>가동률</span>
           <span className="heat-legend-swatches">
-            {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => (
+            {[0.2, 0.4, 0.6, 0.8, 1.0].map(v => (
               <span key={v} className="heat-legend-swatch" style={{ background: heatColor(v) }} title={`${(v*100).toFixed(0)}%`}></span>
             ))}
           </span>
-          <span className="tiny">0 → 100%</span>
+          <span className="tiny">20 → 100%</span>
         </div>
         <div className="heat-legend">
-          <span style={{ width: 10, height: 10, background: ZERO_BILLING_WORK_COLOR, borderRadius: 2, display: 'inline-block' }}></span>
+          <span style={{ width: 14, height: 12, background: ZERO_BILLING_WORK_BG, borderRadius: 2, display: 'inline-block', boxShadow: `inset 3px 0 0 ${ZERO_BILLING_WORK_COLOR}` }}></span>
           <span>업무 0%</span>
         </div>
         <div className="heat-legend">
-          <span style={{ width: 10, height: 10, background: ABSENCE_COLOR, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
+          <span style={{ width: 14, height: 12, background: `repeating-linear-gradient(135deg, ${ABSENCE_BG} 0 5px, ${ABSENCE_STRIPE_COLOR} 5px 7px, ${ABSENCE_BG} 7px 12px)`, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
           <span>부재</span>
+        </div>
+        <div className="heat-legend">
+          <span style={{ width: 14, height: 12, background: UNASSIGNED_BG, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
+          <span>미배정</span>
         </div>
         <div style={{ flex: 1 }}></div>
         <div className="tiny subtle">총 {visibleUsers.length}명 표시 · 목표 85%</div>
@@ -271,14 +312,14 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
         borderLeft: '1px solid var(--border)',
         borderRight: 'none',
         borderBottom: 'none',
-        boxShadow: isCurrent ? 'inset 0 0 0 1px var(--accent)' : 'none',
+        boxShadow: utilizationCellShadow(data, isCurrent),
         position: 'relative',
       }}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <span className="num">{data.value > 0 ? data.value.toFixed(1) : hasNote ? '•' : ''}</span>
+      <span className="num">{utilizationCellLabel(data)}</span>
       {hover && (data.client || data.note) && (
         <div style={{
           position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
@@ -331,9 +372,10 @@ function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride }) {
                       background: utilizationCellBg(d),
                       display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 600,
                       color: utilizationCellTextColor(d), cursor: 'pointer', position: 'relative',
+                      boxShadow: utilizationCellShadow(d),
                     }}>
-                      {d.value > 0 ? (d.value * 100).toFixed(0) : d.note ? '·' : ''}
-                      {d.note && !d.client && <span style={{ position: 'absolute', top: 2, right: 3, width: 4, height: 4, background: 'var(--warn)', borderRadius: '50%' }}></span>}
+                      {utilizationCellLabel(d, true)}
+                      {isAbsence(d) && <span style={{ position: 'absolute', top: 2, right: 3, width: 4, height: 4, background: ABSENCE_COLOR, borderRadius: '50%' }}></span>}
                     </div>
                   );
                 })}
@@ -450,13 +492,19 @@ function UtilGantt({ grouped, weeks, onSelectUser }) {
 // ===== 상단 요약 배너 (DC 제외 전체팀) =====
 function SummaryBanner({ stats, currentWeek, kpiTarget }) {
   const { nextMonthMeta: nm, nextNextMonthMeta: nnm } = stats;
+  const period = stats.periodMeta || {
+    year: weekPeriodYear(currentWeek),
+    month: weekPeriodMonth(currentWeek),
+    quarter: weekPeriodQuarter(currentWeek),
+    half: weekPeriodHalf(currentWeek),
+  };
   const cards = [
     { key: 'week',          label: '이번 주',   sub: `${currentWeek.label} (${currentWeek.range})`,  value: stats.week.avg,          extra: { over: stats.week.overCount, under: stats.week.underCount } },
-    { key: 'month',         label: '이번 달',   sub: `${currentWeek.year}년 ${currentWeek.month}월`, value: stats.month.avg },
+    { key: 'month',         label: '이번 달',   sub: `${period.year}년 ${period.month}월`, value: stats.month.avg },
     { key: 'nextMonth',     label: '다음달',    sub: `${nm.year}년 ${nm.month}월`,                   value: stats.nextMonth.avg,     future: true },
     { key: 'nextNextMonth', label: '다다음달',  sub: `${nnm.year}년 ${nnm.month}월`,                 value: stats.nextNextMonth.avg, future: true },
-    { key: 'quarter',       label: '분기',      sub: `Q${currentWeek.quarter}`,                      value: stats.quarter.avg },
-    { key: 'half',          label: '반기',      sub: `${currentWeek.half}`,                          value: stats.half.avg },
+    { key: 'quarter',       label: '분기',      sub: `Q${period.quarter}`,                           value: stats.quarter.avg },
+    { key: 'half',          label: '반기',      sub: `${period.half}`,                               value: stats.half.avg },
     { key: 'year',          label: '연간',      sub: `${currentWeek.year}`,                          value: stats.year.avg },
   ];
   return (

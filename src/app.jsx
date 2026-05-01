@@ -580,8 +580,8 @@ function Root() {
     return <AuthView authState={authState} onLogout={handleLogout} />;
   }
 
-  // 대기 / 거절
-  if (authState.status === 'pending' || authState.status === 'rejected') {
+  // 대기 / 거절 / 비밀번호 재설정
+  if (authState.status === 'pending' || authState.status === 'rejected' || authState.status === 'recovery') {
     return <AuthView authState={authState} onLogout={handleLogout} />;
   }
 

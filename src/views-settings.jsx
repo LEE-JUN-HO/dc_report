@@ -1005,6 +1005,18 @@ function UserApprovalSettings() {
 
   useEffectS(() => { load(); }, []);
 
+  const sendResetEmail = async (email, name) => {
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error: err } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+      if (err) throw err;
+      alert(`✅ ${name || email}님께 비밀번호 재설정 이메일을 발송했습니다.`);
+    } catch (e) {
+      alert('발송 실패: ' + e.message);
+    }
+  };
+
   const changeStatus = async (profileId, newStatus) => {
     setSaving(s => ({ ...s, [profileId]: true }));
     setError('');
@@ -1090,6 +1102,7 @@ function UserApprovalSettings() {
               <th style={{ width: 80 }}>상태</th>
               <th style={{ width: 130 }}>가입일</th>
               <th style={{ width: 200 }}>권한 변경</th>
+              <th style={{ width: 80 }}>PW 초기화</th>
             </tr>
           </thead>
           <tbody>
@@ -1110,6 +1123,15 @@ function UserApprovalSettings() {
                     <span className="badge" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
                   </td>
                   <td className="tiny subtle num">{joinedAt}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: '#EEF2FF', color: '#4338CA', border: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                      onClick={() => sendResetEmail(p.email, p.name)}
+                    >
+                      이메일 발송
+                    </button>
+                  </td>
                   <td>
                     {isMe ? (
                       <span className="tiny subtle">본인 계정은 변경 불가</span>

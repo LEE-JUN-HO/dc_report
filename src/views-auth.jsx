@@ -122,8 +122,182 @@ function authButtonStyle(loading, isMobile) {
   };
 }
 
+// ── 비밀번호 찾기 화면 ──────────────────────────────────────
+function ForgotPasswordScreen({ onBack }) {
+  const isMobile = useResponsiveViewport();
+  const [email, setEmail]   = useAuthState('');
+  const [loading, setLoading] = useAuthState(false);
+  const [sent, setSent]     = useAuthState(false);
+  const [error, setError]   = useAuthState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!email) { setError('이메일을 입력해주세요.'); return; }
+    if (!email.endsWith('@bigxdata.io')) { setError('@bigxdata.io 이메일만 사용 가능합니다.'); return; }
+    setLoading(true);
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error: err } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+      if (err) throw err;
+      setSent(true);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const iStyle = authInputStyle(isMobile);
+
+  return (
+    <AuthCard isMobile={isMobile}>
+      <div style={authCardStyle(isMobile)}>
+        {sent ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 44, marginBottom: 16 }}>📬</div>
+            <h2 style={{ margin: '0 0 10px', fontSize: isMobile ? 20 : 18, fontWeight: 700, color: '#111827' }}>이메일을 확인해주세요</h2>
+            <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7, margin: '0 0 8px' }}>
+              <b style={{ color: '#111827' }}>{email}</b>로<br />비밀번호 재설정 링크를 발송했습니다.
+            </p>
+            <p style={{ fontSize: 13, color: '#9CA3AF', marginBottom: 24 }}>
+              링크를 클릭하면 새 비밀번호를 설정할 수 있습니다.<br />메일이 오지 않으면 스팸함을 확인해주세요.
+            </p>
+            <button onClick={onBack} style={{
+              padding: isMobile ? '13px 32px' : '10px 24px',
+              background: 'none', border: '1px solid #E5E7EB', borderRadius: 10,
+              fontSize: isMobile ? 15 : 14, color: '#374151', cursor: 'pointer',
+              fontFamily: 'inherit',
+            }}>로그인으로 돌아가기</button>
+          </div>
+        ) : (
+          <>
+            <button onClick={onBack} style={{
+              display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none',
+              color: '#6B7280', cursor: 'pointer', fontSize: 13, padding: '0 0 16px',
+              fontFamily: 'inherit',
+            }}>← 로그인으로</button>
+            <h2 style={{ margin: '0 0 8px', fontSize: isMobile ? 20 : 18, fontWeight: 700, color: '#111827' }}>비밀번호 찾기</h2>
+            <p style={{ margin: '0 0 22px', fontSize: 13, color: '#6B7280', lineHeight: 1.5 }}>
+              가입한 이메일을 입력하면 재설정 링크를 보내드립니다.
+            </p>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: isMobile ? 14 : 13, fontWeight: 500, color: '#374151', marginBottom: 7 }}>이메일</label>
+                <input
+                  type="email" placeholder="name@bigxdata.io" value={email}
+                  onChange={e => setEmail(e.target.value)} style={iStyle}
+                  onFocus={e => e.target.style.borderColor = 'var(--accent,#2563EB)'}
+                  onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+                  disabled={loading} inputMode="email" autoComplete="email"
+                />
+              </div>
+              {error && (
+                <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626', lineHeight: 1.5 }}>
+                  {error}
+                </div>
+              )}
+              <button type="submit" disabled={loading} style={authButtonStyle(loading, isMobile)}>
+                {loading ? '발송 중…' : '재설정 이메일 받기'}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </AuthCard>
+  );
+}
+
+// ── 비밀번호 재설정 화면 (이메일 링크 클릭 후) ───────────────
+function ResetPasswordScreen() {
+  const isMobile = useResponsiveViewport();
+  const [password, setPassword]   = useAuthState('');
+  const [confirm, setConfirm]     = useAuthState('');
+  const [loading, setLoading]     = useAuthState(false);
+  const [done, setDone]           = useAuthState(false);
+  const [error, setError]         = useAuthState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!password)              { setError('새 비밀번호를 입력해주세요.'); return; }
+    if (password.length < 6)   { setError('비밀번호는 6자 이상이어야 합니다.'); return; }
+    if (password !== confirm)  { setError('비밀번호가 일치하지 않습니다.'); return; }
+    setLoading(true);
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const { error: err } = await client.auth.updateUser({ password });
+      if (err) throw err;
+      setDone(true);
+    } catch (err) {
+      setError(getAuthErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const iStyle = authInputStyle(isMobile);
+  const labelStyle = { display: 'block', fontSize: isMobile ? 14 : 13, fontWeight: 500, color: '#374151', marginBottom: 7 };
+
+  if (done) {
+    return (
+      <AuthCard isMobile={isMobile}>
+        <div style={{ ...authCardStyle(isMobile), textAlign: 'center' }}>
+          <div style={{ fontSize: 44, marginBottom: 16 }}>✅</div>
+          <h2 style={{ margin: '0 0 10px', fontSize: isMobile ? 20 : 18, fontWeight: 700, color: '#111827' }}>비밀번호 변경 완료</h2>
+          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.7, margin: '0 0 24px' }}>
+            새 비밀번호로 로그인해주세요.
+          </p>
+          <button onClick={() => location.reload()} style={{
+            padding: isMobile ? '13px 32px' : '11px 28px',
+            background: 'var(--accent,#2563EB)', color: 'white', border: 'none',
+            borderRadius: 10, fontSize: isMobile ? 15 : 14, fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>로그인으로 이동</button>
+        </div>
+      </AuthCard>
+    );
+  }
+
+  return (
+    <AuthCard isMobile={isMobile}>
+      <div style={authCardStyle(isMobile)}>
+        <h2 style={{ margin: '0 0 8px', fontSize: isMobile ? 20 : 18, fontWeight: 700, color: '#111827' }}>새 비밀번호 설정</h2>
+        <p style={{ margin: '0 0 22px', fontSize: 13, color: '#6B7280' }}>새로 사용할 비밀번호를 입력해주세요.</p>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 14 }}>
+          <div>
+            <label style={labelStyle}>새 비밀번호</label>
+            <input type="password" placeholder="6자 이상" value={password}
+              onChange={e => setPassword(e.target.value)} style={iStyle}
+              onFocus={e => e.target.style.borderColor = 'var(--accent,#2563EB)'}
+              onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+              autoComplete="new-password" disabled={loading} />
+          </div>
+          <div>
+            <label style={labelStyle}>비밀번호 확인</label>
+            <input type="password" placeholder="비밀번호 재입력" value={confirm}
+              onChange={e => setConfirm(e.target.value)} style={iStyle}
+              onFocus={e => e.target.style.borderColor = 'var(--accent,#2563EB)'}
+              onBlur={e => e.target.style.borderColor = '#E5E7EB'}
+              autoComplete="new-password" disabled={loading} />
+          </div>
+          {error && (
+            <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, fontSize: 13, color: '#DC2626', lineHeight: 1.5 }}>
+              {error}
+            </div>
+          )}
+          <button type="submit" disabled={loading} style={authButtonStyle(loading, isMobile)}>
+            {loading ? '변경 중…' : '비밀번호 변경'}
+          </button>
+        </form>
+      </div>
+    </AuthCard>
+  );
+}
+
 // ── 로그인 화면 ──────────────────────────────────────────────
-function LoginScreen({ onSwitchToRegister }) {
+function LoginScreen({ onSwitchToRegister, onForgotPassword }) {
   const isMobile = useResponsiveViewport();
   const [email, setEmail]       = useAuthState('');
   const [password, setPassword] = useAuthState('');
@@ -200,15 +374,24 @@ function LoginScreen({ onSwitchToRegister }) {
             {loading ? '로그인 중…' : '로그인'}
           </button>
         </form>
-        <div style={{ marginTop: isMobile ? 22 : 20, textAlign: 'center', fontSize: isMobile ? 14 : 13, color: '#6B7280' }}>
-          계정이 없으신가요?{' '}
-          <button onClick={onSwitchToRegister} style={{
-            background: 'none', border: 'none', color: 'var(--accent, #2563EB)',
-            fontWeight: 600, cursor: 'pointer', fontSize: isMobile ? 14 : 13,
-            padding: '4px 2px', fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+        <div style={{ marginTop: isMobile ? 22 : 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+          <button onClick={onForgotPassword} style={{
+            background: 'none', border: 'none', color: '#9CA3AF',
+            cursor: 'pointer', fontSize: isMobile ? 13 : 12,
+            padding: '2px', fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
           }}>
-            회원가입
+            비밀번호를 잊으셨나요?
           </button>
+          <div style={{ fontSize: isMobile ? 14 : 13, color: '#6B7280' }}>
+            계정이 없으신가요?{' '}
+            <button onClick={onSwitchToRegister} style={{
+              background: 'none', border: 'none', color: 'var(--accent, #2563EB)',
+              fontWeight: 600, cursor: 'pointer', fontSize: isMobile ? 14 : 13,
+              padding: '2px', fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+            }}>
+              회원가입
+            </button>
+          </div>
         </div>
       </div>
     </AuthCard>
@@ -416,12 +599,16 @@ function RegisteredScreen({ onGoLogin }) {
 function AuthView({ authState, onLogout }) {
   const [screen, setScreen] = useAuthState('login');
 
+  // 비밀번호 재설정 링크로 접속한 경우
+  if (authState?.status === 'recovery') return <ResetPasswordScreen />;
+
   if (authState?.status === 'pending' || authState?.status === 'rejected') {
     return <PendingScreen profile={authState.profile} onLogout={onLogout} />;
   }
   if (screen === 'registered') return <RegisteredScreen onGoLogin={() => setScreen('login')} />;
   if (screen === 'register')   return <RegisterScreen onSwitchToLogin={() => setScreen('login')} onRegistered={() => setScreen('registered')} />;
-  return <LoginScreen onSwitchToRegister={() => setScreen('register')} />;
+  if (screen === 'forgot')     return <ForgotPasswordScreen onBack={() => setScreen('login')} />;
+  return <LoginScreen onSwitchToRegister={() => setScreen('register')} onForgotPassword={() => setScreen('forgot')} />;
 }
 
 Object.assign(window, { AuthView, AuthLoadingScreen });

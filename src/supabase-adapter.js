@@ -32,6 +32,18 @@
   console.info('[Resource Hub] Supabase 연결 시도 →', URL);
 
   try {
+    // ── 비밀번호 재설정 링크 감지 (URL 해시에 type=recovery) ──────────
+    const urlHash = new URLSearchParams(window.location.hash.substring(1));
+    if (urlHash.get('type') === 'recovery') {
+      const { data: { session } } = await client.auth.getSession();
+      if (session) {
+        window.__RESOURCE_HUB_AUTH__ = { status: 'recovery', user: session.user, profile: null };
+        window.dispatchEvent(new CustomEvent('auth-state-changed'));
+        resolveReady();
+        return;
+      }
+    }
+
     // ── 인증 확인 ──────────────────────────────────────────────────────
     // profiles 테이블이 없으면 (42P01) 인증 없이 통과 (하위 호환)
     const profilesCheck = await client.from('profiles').select('id').limit(1);

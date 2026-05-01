@@ -1,19 +1,22 @@
 // 설정 — 팀/인원 관리
-const { useState: useStateS } = React;
+const { useState: useStateS, useEffect: useEffectS } = React;
 
 function SettingsView(props) {
   const [tab, setTab] = useStateS('teams');
+  const isAdmin = window.__RESOURCE_HUB_AUTH__?.status === 'admin';
   return (
     <div className="col gap-16">
       <div className="segmented" style={{ alignSelf: 'flex-start' }}>
         <button className={tab === 'teams'    ? 'active' : ''} onClick={() => setTab('teams')}>팀 관리</button>
         <button className={tab === 'users'    ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
         <button className={tab === 'partners' ? 'active' : ''} onClick={() => setTab('partners')}>외주 관리</button>
+        {isAdmin && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>계정 관리</button>}
         <button className={tab === 'sync'     ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
       </div>
       {tab === 'teams'    && <TeamsSettings   {...props} />}
       {tab === 'users'    && <UsersSettings   {...props} />}
       {tab === 'partners' && <PartnersSettings {...props} />}
+      {tab === 'accounts' && isAdmin && <UserApprovalSettings />}
       {tab === 'sync'     && <SyncSettings />}
     </div>
   );
@@ -968,6 +971,190 @@ function PartnersSettings({ onNewPartner, onEditPartner, onDeletePartner, onSave
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ===== 계정 관리 탭 (관리자 전용) =====
+function UserApprovalSettings() {
+  const [profiles, setProfiles]     = useStateS([]);
+  const [loading, setLoading]       = useStateS(true);
+  const [filter, setFilter]         = useStateS('pending'); // 'pending' | 'all'
+  const [saving, setSaving]         = useStateS({});
+  const [error, setError]           = useStateS('');
+  const currentUserId = window.__RESOURCE_HUB_AUTH__?.user?.id;
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      if (!client) throw new Error('Supabase 클라이언트 없음');
+      const { data, error: err } = await client
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (err) throw err;
+      setProfiles(data || []);
+    } catch (e) {
+      setError('계정 목록 로드 실패: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffectS(() => { load(); }, []);
+
+  const changeStatus = async (profileId, newStatus) => {
+    setSaving(s => ({ ...s, [profileId]: true }));
+    setError('');
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const now = new Date().toISOString();
+      const update = {
+        status: newStatus,
+        ...(newStatus === 'approved' || newStatus === 'admin'
+          ? { approved_at: now, approved_by: window.__RESOURCE_HUB_AUTH__?.user?.email || '' }
+          : {}),
+      };
+      const { error: err } = await client.from('profiles').update(update).eq('id', profileId);
+      if (err) throw err;
+      setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, ...update } : p));
+    } catch (e) {
+      setError('상태 변경 실패: ' + e.message);
+    } finally {
+      setSaving(s => { const n = { ...s }; delete n[profileId]; return n; });
+    }
+  };
+
+  const STATUS_META = {
+    pending:  { label: '대기',       color: '#F59E0B', bg: '#FEF3C7' },
+    approved: { label: '승인됨',     color: '#10B981', bg: '#D1FAE5' },
+    admin:    { label: '관리자',     color: '#2563EB', bg: '#DBEAFE' },
+    rejected: { label: '거절됨',     color: '#EF4444', bg: '#FEE2E2' },
+  };
+
+  const filtered = filter === 'pending'
+    ? profiles.filter(p => p.status === 'pending')
+    : profiles;
+
+  const pendingCount = profiles.filter(p => p.status === 'pending').length;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            계정 관리
+            {pendingCount > 0 && (
+              <span style={{
+                background: '#FEF3C7', color: '#B45309',
+                borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700,
+              }}>{pendingCount}명 대기</span>
+            )}
+          </div>
+          <div className="card-sub">가입 승인 및 권한 관리 (관리자 전용)</div>
+        </div>
+        <div style={{ flex: 1 }}></div>
+        <div className="segmented">
+          <button className={filter === 'pending' ? 'active' : ''} onClick={() => setFilter('pending')}>
+            대기 {pendingCount > 0 ? `(${pendingCount})` : ''}
+          </button>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
+            전체 ({profiles.length})
+          </button>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={load} disabled={loading}>
+          <Icon name="zap" size={13} /> 새로고침
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ padding: '10px 20px', background: '#FEF2F2', color: '#DC2626', fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>불러오는 중…</div>
+      ) : filtered.length === 0 ? (
+        <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>
+          {filter === 'pending' ? '승인 대기 중인 계정이 없습니다.' : '등록된 계정이 없습니다.'}
+        </div>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>이메일</th>
+              <th style={{ width: 80 }}>상태</th>
+              <th style={{ width: 130 }}>가입일</th>
+              <th style={{ width: 200 }}>권한 변경</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => {
+              const meta    = STATUS_META[p.status] || STATUS_META.pending;
+              const isMe    = p.id === currentUserId;
+              const isBusy  = !!saving[p.id];
+              const joinedAt = p.created_at ? new Date(p.created_at).toLocaleDateString('ko-KR') : '—';
+
+              return (
+                <tr key={p.id} style={{ opacity: isBusy ? 0.6 : 1 }}>
+                  <td>
+                    <span className="bold small">{p.name || '—'}</span>
+                    {isMe && <span className="badge" style={{ marginLeft: 6, fontSize: 9, background: '#DBEAFE', color: '#1D4ED8' }}>나</span>}
+                  </td>
+                  <td className="small" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.email}</td>
+                  <td>
+                    <span className="badge" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+                  </td>
+                  <td className="tiny subtle num">{joinedAt}</td>
+                  <td>
+                    {isMe ? (
+                      <span className="tiny subtle">본인 계정은 변경 불가</span>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {p.status !== 'approved' && (
+                          <button className="btn btn-sm" style={{ background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy}>
+                            ✓ 승인
+                          </button>
+                        )}
+                        {p.status !== 'admin' && (
+                          <button className="btn btn-sm" style={{ background: '#DBEAFE', color: '#1E40AF', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'admin')} disabled={isBusy}>
+                            ★ 관리자
+                          </button>
+                        )}
+                        {(p.status === 'admin' || p.status === 'approved') && (
+                          <button className="btn btn-sm" style={{ background: '#FEF3C7', color: '#92400E', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy || p.status === 'approved'}>
+                            ↓ 일반사용자
+                          </button>
+                        )}
+                        {p.status !== 'rejected' && (
+                          <button className="btn btn-sm" style={{ background: '#FEE2E2', color: '#991B1B', border: 'none', fontSize: 11 }}
+                            onClick={() => { if (confirm(`"${p.name || p.email}" 계정을 거절하시겠습니까?`)) changeStatus(p.id, 'rejected'); }}
+                            disabled={isBusy}>
+                            ✗ 거절
+                          </button>
+                        )}
+                        {p.status === 'rejected' && (
+                          <button className="btn btn-sm" style={{ background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy}>
+                            ↩ 재승인
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

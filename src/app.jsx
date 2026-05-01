@@ -1,5 +1,5 @@
 // 메인 앱
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "tone": "enterprise",
@@ -280,11 +280,7 @@ function App() {
             <a href="guide.html" target="_blank" className="btn btn-ghost btn-sm" style={{ textDecoration: 'none' }}>
               <Icon name="zap" size={13} /> Supabase 배포하기
             </a>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-sunken)' }}>
-              <Avatar name="허순구" userId="u001" size="sm" />
-              <span className="small bold">허순구</span>
-              <span className="tiny subtle">관리자</span>
-            </div>
+            <UserBadge />
           </div>
         </div>
         <div className="content">
@@ -478,4 +474,119 @@ function TweaksPanel({ tweaks, onChange, onClose }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+// ── 로그인 사용자 배지 ───────────────────────────────────────
+function UserBadge() {
+  const auth = window.__RESOURCE_HUB_AUTH__;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleLogout = async () => {
+    const client = window.__SUPABASE_AUTH_CLIENT__;
+    if (client) await client.auth.signOut();
+    location.reload();
+  };
+
+  if (!auth || !auth.user) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px', borderRadius: 6, background: 'var(--bg-sunken)' }}>
+        <span className="tiny subtle">비연결</span>
+      </div>
+    );
+  }
+
+  const name    = auth.profile?.name || auth.user.email?.split('@')[0] || '사용자';
+  const isAdmin = auth.status === 'admin';
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setMenuOpen(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '4px 8px',
+          borderRadius: 6, background: 'var(--bg-sunken)', border: 'none', cursor: 'pointer',
+        }}
+      >
+        <Avatar name={name} userId={auth.user.id} size="sm" />
+        <span className="small bold">{name}</span>
+        <span className="tiny subtle">{isAdmin ? '관리자' : '일반사용자'}</span>
+      </button>
+      {menuOpen && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200,
+          background: 'var(--bg-elev)', border: '1px solid var(--border)',
+          borderRadius: 8, boxShadow: 'var(--shadow-lg)', minWidth: 160, padding: 4,
+        }}>
+          <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--border)' }}>
+            <div className="small bold" style={{ marginBottom: 2 }}>{name}</div>
+            <div className="tiny subtle">{auth.user.email}</div>
+          </div>
+          <button
+            onClick={handleLogout}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+              padding: '8px 12px', border: 'none', background: 'transparent',
+              textAlign: 'left', fontSize: 13, cursor: 'pointer', color: 'var(--danger)',
+              borderRadius: 4, fontFamily: 'inherit',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <Icon name="x" size={13} /> 로그아웃
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Root 컴포넌트 (인증 게이트) ──────────────────────────────
+function Root() {
+  const [authState, setAuthState] = useState(() => window.__RESOURCE_HUB_AUTH__ || null);
+  const [dataReady, setDataReady] = useState(false);
+
+  useEffect(() => {
+    // 인증 상태 변경 이벤트 수신
+    const onAuth = () => setAuthState({ ...window.__RESOURCE_HUB_AUTH__ });
+    window.addEventListener('auth-state-changed', onAuth);
+    // 데이터 준비 완료
+    const checkReady = () => setDataReady(true);
+    if (window.__RESOURCE_HUB_DATA_READY__) {
+      window.__RESOURCE_HUB_DATA_READY__.then(checkReady);
+    }
+    return () => window.removeEventListener('auth-state-changed', onAuth);
+  }, []);
+
+  const handleLogout = async () => {
+    const client = window.__SUPABASE_AUTH_CLIENT__;
+    if (client) await client.auth.signOut();
+    location.reload();
+  };
+
+  // profiles 테이블이 없는 경우 (노인증 모드) 또는 Supabase 미연결
+  if (!window.__SUPABASE_AUTH_CLIENT__) return <App />;
+  if (authState?.status === 'bypass') return <App />;
+
+  // 아직 인증 상태 미결정
+  if (authState === null) return <AuthLoadingScreen />;
+
+  // 미로그인
+  if (authState.status === 'unauthenticated') {
+    return <AuthView authState={authState} onLogout={handleLogout} />;
+  }
+
+  // 대기 / 거절
+  if (authState.status === 'pending' || authState.status === 'rejected') {
+    return <AuthView authState={authState} onLogout={handleLogout} />;
+  }
+
+  // 승인된 사용자 (approved / admin)
+  return <App />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);

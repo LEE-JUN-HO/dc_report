@@ -28,9 +28,49 @@
 
   // ── Supabase 연결 시도 ─────────────────────────────────────────────────
   const client = window.supabase.createClient(URL, KEY);
+  window.__SUPABASE_AUTH_CLIENT__ = client;
   console.info('[Resource Hub] Supabase 연결 시도 →', URL);
 
   try {
+    // ── 인증 확인 ──────────────────────────────────────────────────────
+    // profiles 테이블이 없으면 (42P01) 인증 없이 통과 (하위 호환)
+    const profilesCheck = await client.from('profiles').select('id').limit(1);
+    const noProfilesTable = profilesCheck.error?.code === '42P01';
+
+    if (!noProfilesTable) {
+      const { data: { session } } = await client.auth.getSession();
+      if (!session) {
+        // 로그인 안 된 상태
+        window.__RESOURCE_HUB_AUTH__ = { status: 'unauthenticated', user: null, profile: null };
+        window.dispatchEvent(new CustomEvent('auth-state-changed'));
+        resolveReady();
+        return;
+      }
+      // 세션 있음 → 프로필 조회
+      const { data: profile, error: profErr } = await client
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (profErr && profErr.code !== '42P01') {
+        console.warn('[Resource Hub] profiles 조회 실패:', profErr.message);
+      }
+      const status = profile?.status || 'pending';
+      if (status !== 'approved' && status !== 'admin') {
+        // pending / rejected → 앱 진입 불가
+        window.__RESOURCE_HUB_AUTH__ = { status, user: session.user, profile };
+        window.dispatchEvent(new CustomEvent('auth-state-changed'));
+        resolveReady();
+        return;
+      }
+      window.__RESOURCE_HUB_AUTH__ = { status, user: session.user, profile };
+      window.dispatchEvent(new CustomEvent('auth-state-changed'));
+    } else {
+      // profiles 테이블 없음 → 인증 우회 (하위 호환)
+      window.__RESOURCE_HUB_AUTH__ = { status: 'bypass', user: null, profile: null };
+      window.dispatchEvent(new CustomEvent('auth-state-changed'));
+    }
+  // ── 데이터 로드 (인증 통과 or 테이블 없음) ─────────────────────────
     async function fetchAllRows(table, queryBuilder, chunkSize = 1000) {
       const rows = [];
       for (let from = 0; ; from += chunkSize) {

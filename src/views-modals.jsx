@@ -144,7 +144,7 @@ function PipelineModal({ open, onClose, onSave, onDelete, initialProject }) {
   const isEdit = !!initialProject;
   const emptyForm = {
     priority: 99, client: '', kind: 'PJ', status: '예정', sales: '',
-    preSales: '', start: '2026-06-01', end: '2026-08-31', mm: null,
+    preSales: '', start: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2,'0')}-01`, end: `${new Date().getFullYear()}-${String(Math.min(new Date().getMonth() + 3, 12)).padStart(2,'0')}-30`, mm: null,
     winProbability: null, members: '', note: '',
   };
   const [form, setForm] = useStateM(emptyForm);

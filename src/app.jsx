@@ -369,7 +369,8 @@ function App() {
 function Sidebar({ view, onNavigate }) {
   const APP = window.APP_DATA || {};
   const currentWeek = APP.WEEKS?.[APP.currentWeekIdx?.()];
-  const todayLabel = APP.TODAY && APP.fmtYMD ? APP.fmtYMD(APP.TODAY) : '2026';
+  const todayLabel = APP.TODAY && APP.fmtYMD ? APP.fmtYMD(APP.TODAY) : String(new Date().getFullYear());
+  const dataYear = APP.MONTHS?.[0]?.year || new Date().getFullYear();
   const items = [
     { id: 'dashboard',   label: '대시보드',       icon: 'dashboard' },
     { id: 'utilization', label: '주간 가동률',     icon: 'grid' },
@@ -383,7 +384,7 @@ function Sidebar({ view, onNavigate }) {
         <div className="sidebar-brand-mark">RH</div>
         <div>
           <div className="sidebar-brand-name">Resource Hub</div>
-          <div className="sidebar-brand-sub">2026</div>
+          <div className="sidebar-brand-sub">{dataYear}</div>
         </div>
       </div>
       <div className="sidebar-section-label">Main</div>

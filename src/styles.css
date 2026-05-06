@@ -57,10 +57,14 @@
   --transition: 0.33s;
   --transition-link: box-shadow 0.33s cubic-bezier(0.5, 0, 0, 0.75), color 0.33s;
 
-  /* Typography */
-  --font-display: 'Universal Sans Display', -apple-system, Arial, sans-serif;
-  --font-text:    'Universal Sans Text',    -apple-system, Arial, sans-serif;
-  --font-mono:    'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
+  /* Typography — 한글 웹세이프 시스템 폰트 스택 */
+  --font-display: 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕',
+                  -apple-system, BlinkMacSystemFont, 'Noto Sans KR',
+                  'Nanum Gothic', sans-serif;
+  --font-text:    'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕',
+                  -apple-system, BlinkMacSystemFont, 'Noto Sans KR',
+                  'Nanum Gothic', sans-serif;
+  --font-mono:    'D2Coding', 'SF Mono', 'JetBrains Mono', ui-monospace, monospace;
 }
 
 /* ─── Reset ─── */
@@ -70,14 +74,15 @@ html, body {
   margin: 0;
   padding: 0;
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 16px;       /* 14 → 16 : 40대 이상 가독성 */
   font-weight: 400;
-  line-height: 1.43;
-  letter-spacing: normal;
+  line-height: 1.65;     /* 한글 행간 */
+  letter-spacing: -0.01em;
   background: var(--surface-alt);
   color: var(--body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  word-break: keep-all;  /* 한글 단어 단위 줄바꿈 */
 }
 
 button { font-family: inherit; cursor: pointer; }
@@ -129,7 +134,7 @@ a:hover { color: var(--ink); text-decoration: underline; }
 .sidebar-brand-name {
   font-family: var(--font-display);
   font-weight: 500;
-  font-size: 14px;
+  font-size: 15px;
   color: var(--on-dark);
 }
 
@@ -152,10 +157,10 @@ a:hover { color: var(--ink); text-decoration: underline; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px var(--sp-1);
+  padding: 9px var(--sp-1);
   border-radius: var(--radius-btn);
   color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 400;
   border: none;
   background: transparent;
@@ -218,14 +223,14 @@ a:hover { color: var(--ink); text-decoration: underline; }
 
 .topbar-title {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   color: var(--ink);
-  line-height: 1.18;
+  line-height: 1.3;
 }
 
 .topbar-sub {
-  font-size: 14px;
+  font-size: 15px;
   color: var(--placeholder);
   margin-left: var(--sp-1);
 }
@@ -249,15 +254,15 @@ a:hover { color: var(--ink); text-decoration: underline; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px var(--sp-2);
-  min-height: 40px;
+  padding: 8px var(--sp-2);
+  min-height: 44px;
   width: 200px;
   border-radius: var(--radius-btn);
   border: 3px solid transparent;
   background: var(--electric-blue);
   color: var(--on-dark);
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   box-shadow: rgba(0, 0, 0, 0) 0px 0px 0px 2px inset;
   transition: border-color var(--transition), background-color var(--transition),
@@ -275,15 +280,15 @@ a:hover { color: var(--ink); text-decoration: underline; }
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px var(--sp-2);
-  min-height: 40px;
+  padding: 8px var(--sp-2);
+  min-height: 44px;
   width: 200px;
   border-radius: var(--radius-btn);
   border: 3px solid transparent;
   background: var(--canvas);
   color: var(--body);
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   box-shadow: rgba(0, 0, 0, 0) 0px 0px 0px 2px inset;
   transition: border-color var(--transition), background-color var(--transition),
@@ -300,14 +305,14 @@ a:hover { color: var(--ink); text-decoration: underline; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px var(--sp-2);
-  min-height: 32px;
+  padding: 6px var(--sp-2);
+  min-height: 36px;
   border-radius: var(--radius-btn);
   border: none;
   background: transparent;
   color: var(--ink);
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   transition: background-color var(--transition), color var(--transition);
 }
@@ -383,7 +388,7 @@ a:hover { color: var(--ink); text-decoration: underline; }
   font-size: 17px;
   font-weight: 500;
   color: var(--ink);
-  line-height: 1.18;
+  line-height: 1.4;
 }
 
 .card-sub {
@@ -418,16 +423,16 @@ a:hover { color: var(--ink); text-decoration: underline; }
 
 .kpi-value {
   font-family: var(--font-display);
-  font-size: 40px;
+  font-size: 32px;      /* 40 → 32 : 그리드 레이아웃 깨지지 않도록 */
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 1.25;
   margin-top: var(--sp-1);
   font-variant-numeric: tabular-nums;
   color: var(--ink);
 }
 
 .kpi-value-sub {
-  font-size: 17px;
+  font-size: 16px;
   color: var(--tertiary);
   font-weight: 400;
   margin-left: 4px;
@@ -568,13 +573,13 @@ a:hover { color: var(--ink); text-decoration: underline; }
   width: 100%;
   border-collapse: collapse;
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
 }
 .data-table th {
   text-align: left;
   font-weight: 500;
   color: var(--tertiary);
-  padding: 10px var(--sp-1);
+  padding: 11px var(--sp-1);
   border-bottom: 1px solid var(--border);
   background: var(--canvas);
   font-size: 13px;
@@ -583,9 +588,10 @@ a:hover { color: var(--ink); text-decoration: underline; }
   z-index: 1;
 }
 .data-table td {
-  padding: 10px var(--sp-1);
+  padding: 11px var(--sp-1);
   border-bottom: 1px solid var(--border);
   color: var(--body);
+  line-height: 1.55;
 }
 .data-table tr:hover td { background: var(--surface-alt); }
 .data-table tr:last-child td { border-bottom: none; }
@@ -634,10 +640,10 @@ a:hover { color: var(--ink); text-decoration: underline; }
 
 .modal-title {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 18px;
   font-weight: 500;
   color: var(--ink);
-  line-height: 1.18;
+  line-height: 1.4;
 }
 
 .modal-body { padding: var(--sp-3); }
@@ -660,7 +666,7 @@ a:hover { color: var(--ink); text-decoration: underline; }
 
 .field-label {
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--ink);
 }
@@ -676,7 +682,7 @@ a:hover { color: var(--ink); text-decoration: underline; }
   border: 1px solid var(--border-subtle);
   background: transparent;
   font-family: var(--font-text);
-  font-size: 14px;
+  font-size: 16px;      /* iOS 자동 확대 방지 및 가독성 */
   font-weight: 400;
   color: var(--ink);
   width: 100%;
@@ -689,8 +695,8 @@ a:hover { color: var(--ink); text-decoration: underline; }
 }
 
 .input-sm, .select-sm {
-  padding: 6px var(--sp-1);
-  font-size: 13px;
+  padding: 7px var(--sp-1);
+  font-size: 15px;
 }
 
 /* ─── Avatar ─── */

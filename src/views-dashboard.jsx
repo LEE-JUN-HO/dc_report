@@ -185,7 +185,7 @@ function DashboardView({ onNavigate, dataVersion }) {
           metaWrap={true}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
-        <LevelCard activeUsers={activeUsers} />
+        <NoticeCard />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, alignItems: 'stretch' }}>
@@ -253,26 +253,320 @@ function DashboardView({ onNavigate, dataVersion }) {
   );
 }
 
-function LevelCard({ activeUsers }) {
-  const { LEVELS, LEVEL_COLORS } = window.APP_DATA;
-  const counts = {};
-  LEVELS.forEach(l => counts[l] = 0);
-  activeUsers.forEach(u => counts[u.level] = (counts[u.level] || 0) + 1);
+function NoticeCard() {
+  const [notices, setNotices] = React.useState([]);
+  const [comments, setComments] = React.useState({});
+  const [writing, setWriting] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const [draftAuthor, setDraftAuthor] = React.useState(() => localStorage.getItem('notice_author_name') || '');
+  const [saving, setSaving] = React.useState(false);
+  const [expandedId, setExpandedId] = React.useState(null);
+  const [commentDraft, setCommentDraft] = React.useState({});
+  const [commentAuthor, setCommentAuthor] = React.useState({});
+  const [commentSaving, setCommentSaving] = React.useState({});
+  const taRef = React.useRef(null);
+
+  const fmtDate = (iso) => {
+    const d = new Date(iso);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
+  const reload = () => {
+    setNotices([...(window.APP_DATA?.NOTICES || [])]);
+    setComments({ ...(window.APP_DATA?.NOTICE_COMMENTS || {}) });
+  };
+
+  React.useEffect(() => {
+    reload();
+    window.addEventListener('data-changed', reload);
+    window.addEventListener('notice-changed', reload);
+    return () => {
+      window.removeEventListener('data-changed', reload);
+      window.removeEventListener('notice-changed', reload);
+    };
+  }, []);
+
+  const startWrite = () => {
+    setDraft('');
+    setWriting(true);
+    setTimeout(() => taRef.current && taRef.current.focus(), 0);
+  };
+
+  const handleSave = async () => {
+    if (!draft.trim()) return;
+    setSaving(true);
+    const author = draftAuthor.trim();
+    if (author) localStorage.setItem('notice_author_name', author);
+    try {
+      if (window.APP_DATA?.addNotice) {
+        await window.APP_DATA.addNotice(draft.trim(), author);
+      } else {
+        const list = JSON.parse(localStorage.getItem('notices_list') || '[]');
+        list.unshift({ id: Date.now(), content: draft.trim(), author, createdAt: new Date().toISOString() });
+        localStorage.setItem('notices_list', JSON.stringify(list));
+        if (!window.APP_DATA.NOTICES) window.APP_DATA.NOTICES = [];
+        window.APP_DATA.NOTICES = list;
+        reload();
+      }
+      setDraft('');
+      setWriting(false);
+    } catch (e) {
+      alert('저장 실패: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('삭제하시겠습니까?')) return;
+    try {
+      if (window.APP_DATA?.deleteNotice) {
+        await window.APP_DATA.deleteNotice(id);
+      } else {
+        const list = JSON.parse(localStorage.getItem('notices_list') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('notices_list', JSON.stringify(list));
+        window.APP_DATA.NOTICES = list;
+        reload();
+      }
+      if (expandedId === id) setExpandedId(null);
+    } catch (e) {
+      alert('삭제 실패: ' + e.message);
+    }
+  };
+
+  const handleAddComment = async (noticeId) => {
+    const content = (commentDraft[noticeId] || '').trim();
+    if (!content) return;
+    const author = (commentAuthor[noticeId] || '').trim();
+    if (author) localStorage.setItem('notice_author_name', author);
+    setCommentSaving(prev => ({ ...prev, [noticeId]: true }));
+    try {
+      if (window.APP_DATA?.addNoticeComment) {
+        await window.APP_DATA.addNoticeComment(noticeId, content, author);
+      } else {
+        const nc = window.APP_DATA.NOTICE_COMMENTS || {};
+        const list = [...(nc[noticeId] || [])];
+        list.push({ id: Date.now(), notice_id: noticeId, content, author, createdAt: new Date().toISOString() });
+        window.APP_DATA.NOTICE_COMMENTS = { ...nc, [noticeId]: list };
+        reload();
+      }
+      setCommentDraft(prev => ({ ...prev, [noticeId]: '' }));
+    } catch (e) {
+      alert('댓글 저장 실패: ' + e.message);
+    } finally {
+      setCommentSaving(prev => ({ ...prev, [noticeId]: false }));
+    }
+  };
+
+  const handleDeleteComment = async (commentId, noticeId) => {
+    if (!confirm('댓글을 삭제하시겠습니까?')) return;
+    try {
+      if (window.APP_DATA?.deleteNoticeComment) {
+        await window.APP_DATA.deleteNoticeComment(commentId, noticeId);
+      } else {
+        const nc = window.APP_DATA.NOTICE_COMMENTS || {};
+        window.APP_DATA.NOTICE_COMMENTS = { ...nc, [noticeId]: (nc[noticeId] || []).filter(c => c.id !== commentId) };
+        reload();
+      }
+    } catch (e) {
+      alert('삭제 실패: ' + e.message);
+    }
+  };
+
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
-        <div className="small bold">등급 구성</div>
-        <div className="tiny subtle">재직자 {activeUsers.length}명</div>
+      {/* 헤더 */}
+      <div style={{ padding: '14px 18px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1 }}>
+          <div className="small bold">공지 · 메모</div>
+          <div className="tiny subtle">팀 공유 · {notices.length}건</div>
+        </div>
+        {!writing && (
+          <button onClick={startWrite} style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 10px', borderRadius: 6,
+            border: '1px solid var(--blue-500)', background: 'transparent',
+            color: 'var(--blue-500)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <Icon name="plus" size={12} /> 작성
+          </button>
+        )}
       </div>
       <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
-      <div style={{ padding: '4px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-        {LEVELS.map(l => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: LEVEL_COLORS[l], flexShrink: 0 }}></span>
-            <span style={{ flex: 1, fontSize: 15, fontWeight: 500 }}>{l}</span>
-            <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{counts[l]}</span>
+
+      {/* 작성 폼 */}
+      {writing && (
+        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+          <input
+            type="text"
+            value={draftAuthor}
+            onChange={e => setDraftAuthor(e.target.value)}
+            placeholder="작성자 이름"
+            style={{
+              width: '100%', boxSizing: 'border-box',
+              border: '1px solid var(--border-strong)', borderRadius: 6,
+              padding: '5px 10px', fontSize: 12, marginBottom: 6,
+              outline: 'none', fontFamily: 'inherit',
+              color: 'var(--text)', background: 'var(--bg-sunken)',
+            }}
+          />
+          <textarea
+            ref={taRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="공지사항, 팀 메모 등을 입력하세요..."
+            rows={3}
+            style={{
+              width: '100%', resize: 'none', boxSizing: 'border-box',
+              border: '1px solid var(--border-strong)', borderRadius: 6,
+              padding: '7px 10px', fontSize: 13, lineHeight: 1.6,
+              outline: 'none', fontFamily: 'inherit',
+              color: 'var(--text)', background: 'var(--bg-sunken)',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+            <button onClick={() => { setWriting(false); setDraft(''); }}
+              style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>
+              취소
+            </button>
+            <button onClick={handleSave} disabled={saving || !draft.trim()}
+              style={{ padding: '4px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (saving || !draft.trim()) ? 0.6 : 1 }}>
+              {saving ? '저장 중…' : '등록'}
+            </button>
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* 목록 */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {notices.length === 0 ? (
+          <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text-subtle)' }}>
+            + 작성 버튼을 눌러 첫 번째 메모를 남겨보세요.
+          </div>
+        ) : notices.map((n, i) => {
+          const isExpanded = expandedId === n.id;
+          const nComments = (comments[n.id] || []);
+          const cDraft = commentDraft[n.id] || '';
+          const cAuthor = commentAuthor[n.id] !== undefined ? commentAuthor[n.id] : (localStorage.getItem('notice_author_name') || '');
+          const cSaving = !!commentSaving[n.id];
+          return (
+            <div key={n.id}
+              style={{ borderTop: i > 0 ? '1px solid var(--border)' : 'none', padding: '8px 14px' }}>
+              {/* 날짜 + 작성자 + 삭제 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                {n.author && (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{n.author}</span>
+                )}
+                <span style={{ fontSize: 11, color: 'var(--text-subtle)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtDate(n.createdAt)}
+                </span>
+                <span style={{ flex: 1 }} />
+                {nComments.length > 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--blue-500)', fontWeight: 600, cursor: 'pointer' }}
+                    onClick={() => setExpandedId(isExpanded ? null : n.id)}>
+                    💬 {nComments.length}
+                  </span>
+                )}
+                <button onClick={() => handleDelete(n.id)} style={{
+                  display: 'flex', alignItems: 'center', padding: '1px 4px',
+                  border: 'none', background: 'none', color: 'var(--text-subtle)',
+                  cursor: 'pointer', borderRadius: 4, fontSize: 11,
+                }} title="삭제">
+                  <Icon name="trash" size={11} />
+                </button>
+              </div>
+              {/* 내용 (접기/펼치기) */}
+              <div
+                onClick={() => setExpandedId(isExpanded ? null : n.id)}
+                style={{
+                  fontSize: 13, lineHeight: 1.65, color: 'var(--text)',
+                  whiteSpace: 'pre-wrap', cursor: 'pointer',
+                  display: '-webkit-box', WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: isExpanded ? 'unset' : 2,
+                  overflow: isExpanded ? 'visible' : 'hidden',
+                }}
+              >
+                {n.content}
+              </div>
+              {!isExpanded && n.content.length > 60 && (
+                <span style={{ fontSize: 11, color: 'var(--blue-500)', cursor: 'pointer' }}
+                  onClick={() => setExpandedId(n.id)}>더 보기</span>
+              )}
+
+              {/* 펼쳐진 상태: 댓글 영역 */}
+              {isExpanded && (
+                <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px dashed var(--border)' }}>
+                  {/* 댓글 목록 */}
+                  {nComments.length > 0 && (
+                    <div style={{ marginBottom: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {nComments.map(c => (
+                        <div key={c.id} style={{ background: 'var(--bg-sunken)', borderRadius: 6, padding: '6px 10px', position: 'relative' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                            {c.author && (
+                              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text)' }}>{c.author}</span>
+                            )}
+                            <span style={{ fontSize: 10, color: 'var(--text-subtle)' }}>{fmtDate(c.createdAt)}</span>
+                            <span style={{ flex: 1 }} />
+                            <button onClick={() => handleDeleteComment(c.id, n.id)} style={{
+                              border: 'none', background: 'none', color: 'var(--text-subtle)',
+                              cursor: 'pointer', padding: '1px 2px', borderRadius: 3,
+                            }} title="삭제">
+                              <Icon name="trash" size={10} />
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 12, lineHeight: 1.6, color: 'var(--text)', whiteSpace: 'pre-wrap' }}>{c.content}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {/* 댓글 작성 폼 */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <input
+                      type="text"
+                      value={cAuthor}
+                      onChange={e => setCommentAuthor(prev => ({ ...prev, [n.id]: e.target.value }))}
+                      placeholder="댓글 작성자"
+                      style={{
+                        width: '100%', boxSizing: 'border-box',
+                        border: '1px solid var(--border)', borderRadius: 5,
+                        padding: '4px 8px', fontSize: 11,
+                        outline: 'none', fontFamily: 'inherit',
+                        color: 'var(--text)', background: 'var(--bg-sunken)',
+                      }}
+                    />
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <input
+                        type="text"
+                        value={cDraft}
+                        onChange={e => setCommentDraft(prev => ({ ...prev, [n.id]: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(n.id); } }}
+                        placeholder="댓글 입력 후 Enter"
+                        style={{
+                          flex: 1, border: '1px solid var(--border)', borderRadius: 5,
+                          padding: '4px 8px', fontSize: 12,
+                          outline: 'none', fontFamily: 'inherit',
+                          color: 'var(--text)', background: 'var(--bg-sunken)',
+                        }}
+                      />
+                      <button
+                        onClick={() => handleAddComment(n.id)}
+                        disabled={cSaving || !cDraft.trim()}
+                        style={{
+                          padding: '4px 10px', borderRadius: 5, border: 'none',
+                          background: 'var(--blue-500)', color: '#fff',
+                          fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                          opacity: (cSaving || !cDraft.trim()) ? 0.5 : 1, flexShrink: 0,
+                        }}>
+                        {cSaving ? '…' : '등록'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

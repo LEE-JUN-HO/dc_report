@@ -336,7 +336,7 @@ function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, target
 
 function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick, help, metaWrap = false }) {
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* 헤더 */}
       <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>
         <div style={{ width: 32, height: 32, borderRadius: 8, background: iconBg, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>

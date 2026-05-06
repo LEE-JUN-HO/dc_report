@@ -185,7 +185,7 @@ function DashboardView({ onNavigate, dataVersion }) {
           metaWrap={true}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
-        <LevelCard activeUsers={activeUsers} />
+        <NoticeCard />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14, alignItems: 'stretch' }}>
@@ -253,27 +253,103 @@ function DashboardView({ onNavigate, dataVersion }) {
   );
 }
 
-function LevelCard({ activeUsers }) {
-  const { LEVELS, LEVEL_COLORS } = window.APP_DATA;
-  const counts = {};
-  LEVELS.forEach(l => counts[l] = 0);
-  activeUsers.forEach(u => counts[u.level] = (counts[u.level] || 0) + 1);
+function NoticeCard() {
+  const STORAGE_KEY = 'dashboard_notice_text';
+  const [text, setText] = React.useState('');
+  const [draft, setDraft] = React.useState('');
+  const [editing, setEditing] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+  const taRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const v = localStorage.getItem(STORAGE_KEY) || '';
+    setText(v);
+  }, []);
+
+  const startEdit = () => {
+    setDraft(text);
+    setEditing(true);
+    setSaved(false);
+    setTimeout(() => taRef.current && taRef.current.focus(), 0);
+  };
+
+  const handleSave = () => {
+    localStorage.setItem(STORAGE_KEY, draft);
+    setText(draft);
+    setEditing(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  };
+
+  const handleCancel = () => {
+    setDraft(text);
+    setEditing(false);
+  };
+
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-      <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
-        <div className="small bold">등급 구성</div>
-        <div className="tiny subtle">재직자 {activeUsers.length}명</div>
+      {/* 헤더 */}
+      <div style={{ padding: '14px 18px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="small bold">공지 · 메모</div>
+          <div className="tiny subtle">{saved ? '✓ 저장됨' : '팀 공유 메모'}</div>
+        </div>
+        {!editing && (
+          <button
+            onClick={startEdit}
+            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--canvas)', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
+          >
+            <Icon name="edit" size={12} /> 편집
+          </button>
+        )}
       </div>
       <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
-      <div style={{ padding: '4px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-        {LEVELS.map(l => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: LEVEL_COLORS[l], flexShrink: 0 }}></span>
-            <span style={{ flex: 1, fontSize: 15, fontWeight: 500 }}>{l}</span>
-            <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{counts[l]}</span>
+
+      {/* 본문 */}
+      {editing ? (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '10px 14px 12px', gap: 8 }}>
+          <textarea
+            ref={taRef}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            placeholder="공지사항, 팀 메모 등을 입력하세요..."
+            style={{
+              flex: 1,
+              minHeight: 120,
+              resize: 'none',
+              border: '1px solid var(--border-strong)',
+              borderRadius: 6,
+              padding: '8px 10px',
+              fontSize: 14,
+              lineHeight: 1.7,
+              outline: 'none',
+              fontFamily: 'inherit',
+              color: 'var(--text)',
+              background: 'var(--bg-sunken)',
+              boxSizing: 'border-box',
+              width: '100%',
+            }}
+          />
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={handleCancel}
+              style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
+              취소
+            </button>
+            <button onClick={handleSave}
+              style={{ padding: '5px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+              저장
+            </button>
           </div>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, padding: '10px 18px 14px', overflowY: 'auto' }}>
+          {text ? (
+            <div style={{ fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{text}</div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 4 }}>편집 버튼을 눌러 공지나 메모를 입력하세요.</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

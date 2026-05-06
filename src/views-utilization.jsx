@@ -327,15 +327,43 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       onMouseLeave={() => setHover(false)}
     >
       <span className="num">{utilizationCellLabel(data)}</span>
-      {hover && (data.client || data.note) && (
+      {hover && (data.client || data.note || data.hasValue) && (
         <div style={{
-          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--text)', color: 'white', padding: '8px 10px', borderRadius: 6,
-          fontSize: 11, whiteSpace: 'nowrap', zIndex: 100, boxShadow: 'var(--shadow-lg)',
-          pointerEvents: 'none', marginTop: 4,
+          position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          background: '#191F28',
+          border: '1px solid rgba(255,255,255,0.12)',
+          color: '#FFFFFF',
+          padding: '9px 13px',
+          borderRadius: 8,
+          fontSize: 13,
+          fontWeight: 400,
+          lineHeight: 1.7,
+          whiteSpace: 'nowrap',
+          zIndex: 200,
+          boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+          pointerEvents: 'none',
+          minWidth: 140,
         }}>
-          {data.client && <div>{data.client} · {data.value}</div>}
-          {data.note && <div style={{ opacity: 0.7 }}>📌 {data.note}</div>}
+          {data.client && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#A8B4C0' }}>고객사</span>
+              <span style={{ fontWeight: 600, color: '#FFFFFF' }}>{data.client}</span>
+            </div>
+          )}
+          {data.hasValue && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#A8B4C0' }}>가동률</span>
+              <span style={{ fontWeight: 700, color: isZeroBillingWork(data) ? '#F04452' : '#4FC3F7' }}>
+                {isZeroBillingWork(data) ? '0% (무상투입)' : `${(data.value * 100).toFixed(0)}%`}
+              </span>
+            </div>
+          )}
+          {data.note && (
+            <div style={{ display: 'flex', gap: 8, marginTop: data.client || data.hasValue ? 4 : 0, paddingTop: data.client || data.hasValue ? 4 : 0, borderTop: data.client || data.hasValue ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
+              <span style={{ color: '#F5A623' }}>📌</span>
+              <span style={{ color: '#FFE082' }}>{data.note}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

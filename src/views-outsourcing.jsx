@@ -425,7 +425,6 @@ function OutsourcingTable({ grouped, months, curMonthId, onOpenCell, onEditPartn
                     <span className="small" style={{ color: 'var(--text-muted)' }}>{p.company || '—'}</span>
                     {p.status === 'ended'   && <span className="badge" style={{ fontSize: 9, background: 'var(--bg-sunken)' }}>종료</span>}
                     {p.status === 'inactive' && <span className="badge" style={{ fontSize: 9, background: 'var(--warn-weak)', color: 'var(--warn)' }}>비활성</span>}
-                    {p.contractType && <span className="tiny subtle" style={{ fontSize: 9 }}>{p.contractType}</span>}
                   </div>
                   <div style={{ padding: '6px 8px', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
                     onClick={() => onEditPartner && onEditPartner(p.id)}>

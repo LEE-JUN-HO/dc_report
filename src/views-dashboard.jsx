@@ -342,8 +342,8 @@ function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemCli
       {/* 구분선 */}
       <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
 
-      {/* 명단 — 세로 스크롤 허용 */}
-      <div style={{ overflowY: 'auto', maxHeight: 260, padding: '4px 0 10px' }}>
+      {/* 명단 — 4명까지 표시, 초과 시 세로 스크롤 */}
+      <div style={{ overflowY: 'auto', maxHeight: metaWrap ? 228 : 204, padding: '4px 0 10px' }}>
         {items.length === 0 ? (
           <div className="tiny subtle" style={{ padding: '8px 18px' }}>해당 없음 ✓</div>
         ) : items.map((item, i) => (

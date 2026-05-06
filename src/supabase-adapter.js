@@ -96,21 +96,23 @@
       }
     }
 
-    const [tRes, uRes, utRes, pRes, opRes, orRes] = await Promise.all([
+    const [tRes, uRes, utRes, pRes, opRes, orRes, asRes] = await Promise.all([
       client.from('teams').select('*').order('sort_order'),
       client.from('users').select('*').order('id'),
       fetchAllRows('utilization', q => q.order('user_id').order('week_id')),
       client.from('pipeline').select('*').order('priority').order('start_date'),
       client.from('outsourcing_partners').select('*').order('sort_order').order('id'),
       fetchAllRows('outsourcing_records', q => q.order('partner_id').order('month_id')),
+      client.from('app_settings').select('*'),
     ]);
 
     if (tRes.error || uRes.error || utRes.error || pRes.error) {
       throw new Error('쿼리 실패: ' + JSON.stringify([tRes, uRes, utRes, pRes].map(r => r.error?.message).filter(Boolean)));
     }
-    // outsourcing 테이블은 아직 생성 전일 수 있으므로 오류를 무시
+    // 아직 생성 전일 수 있는 테이블은 오류를 무시
     if (opRes.error) console.warn('[Resource Hub] outsourcing_partners 로드 실패 (마이그레이션 필요):', opRes.error.message);
     if (orRes.error) console.warn('[Resource Hub] outsourcing_records 로드 실패 (마이그레이션 필요):', orRes.error.message);
+    if (asRes.error) console.warn('[Resource Hub] app_settings 로드 실패 (마이그레이션 필요):', asRes.error.message);
 
     const TEAMS = tRes.data.map(t => ({ id: t.id, name: t.name, color: t.color }));
     const USERS = uRes.data.map(u => ({
@@ -154,7 +156,13 @@
       });
     }
 
-    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS });
+    // app_settings → key-value 맵으로 변환
+    const APP_SETTINGS = {};
+    if (!asRes.error) {
+      (asRes.data || []).forEach(row => { APP_SETTINGS[row.key] = row.value; });
+    }
+
+    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS, APP_SETTINGS });
     window.APP_DATA.SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
     window.__SUPABASE_CLIENT__ = client;
     window.__SUPABASE_CONNECTED__ = true;
@@ -312,6 +320,18 @@
       }
     };
 
+    window.APP_DATA.saveAppSetting = async (key, value) => {
+      throwIfError(
+        await client.from('app_settings').upsert(
+          { key, value, updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        ),
+        'app_settings 저장'
+      );
+      if (!window.APP_DATA.APP_SETTINGS) window.APP_DATA.APP_SETTINGS = {};
+      window.APP_DATA.APP_SETTINGS[key] = value;
+    };
+
     client
       .channel('util-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'utilization' }, () => {
@@ -325,6 +345,14 @@
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'outsourcing_records' }, () => {
         window.dispatchEvent(new CustomEvent('data-changed'));
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, async () => {
+        const res = await client.from('app_settings').select('*');
+        if (!res.error) {
+          if (!window.APP_DATA.APP_SETTINGS) window.APP_DATA.APP_SETTINGS = {};
+          (res.data || []).forEach(row => { window.APP_DATA.APP_SETTINGS[row.key] = row.value; });
+          window.dispatchEvent(new CustomEvent('notice-changed'));
+        }
       })
       .subscribe();
 

@@ -255,30 +255,56 @@ function DashboardView({ onNavigate, dataVersion }) {
 
 function NoticeCard() {
   const STORAGE_KEY = 'dashboard_notice_text';
+  const SETTING_KEY = 'dashboard_notice';
   const [text, setText] = React.useState('');
   const [draft, setDraft] = React.useState('');
   const [editing, setEditing] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const taRef = React.useRef(null);
 
+  const loadText = () => {
+    const fromSupabase = window.APP_DATA?.APP_SETTINGS?.[SETTING_KEY];
+    if (fromSupabase != null) return fromSupabase;
+    return localStorage.getItem(STORAGE_KEY) || '';
+  };
+
   React.useEffect(() => {
-    const v = localStorage.getItem(STORAGE_KEY) || '';
-    setText(v);
+    setText(loadText());
+    const onDataChanged = () => setText(loadText());
+    const onNoticeChanged = () => setText(loadText());
+    window.addEventListener('data-changed', onDataChanged);
+    window.addEventListener('notice-changed', onNoticeChanged);
+    return () => {
+      window.removeEventListener('data-changed', onDataChanged);
+      window.removeEventListener('notice-changed', onNoticeChanged);
+    };
   }, []);
 
   const startEdit = () => {
-    setDraft(text);
+    setDraft(loadText());
     setEditing(true);
     setSaved(false);
     setTimeout(() => taRef.current && taRef.current.focus(), 0);
   };
 
-  const handleSave = () => {
-    localStorage.setItem(STORAGE_KEY, draft);
-    setText(draft);
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      if (window.APP_DATA?.saveAppSetting) {
+        await window.APP_DATA.saveAppSetting(SETTING_KEY, draft);
+      } else {
+        localStorage.setItem(STORAGE_KEY, draft);
+      }
+      setText(draft);
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      alert('저장 실패: ' + e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
@@ -335,9 +361,9 @@ function NoticeCard() {
               style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
               취소
             </button>
-            <button onClick={handleSave}
-              style={{ padding: '5px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-              저장
+            <button onClick={handleSave} disabled={saving}
+              style={{ padding: '5px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1 }}>
+              {saving ? '저장 중…' : '저장'}
             </button>
           </div>
         </div>

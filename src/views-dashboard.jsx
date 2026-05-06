@@ -158,15 +158,16 @@ function DashboardView({ onNavigate, dataVersion }) {
           iconBg="var(--accent-weak)" iconColor="var(--accent)"
           help={helpTexts.free}
           count={alerts.free.length} subtitle="빌링 0%"
-          items={alerts.free.slice(0, 3).map(a => ({ name: a.user.name, meta: a.client || a.note || '0%', color: 'var(--accent)', userId: a.user.id }))}
+          items={alerts.free.map(a => ({ name: a.user.name, meta: a.client || a.note || '0%', color: 'var(--accent)', userId: a.user.id }))}
+          metaWrap={true}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
         <AlertCard
           title="저활용"
           iconBg="var(--warn-weak)" iconColor="var(--warn)"
           help={helpTexts.under}
-          count={alerts.under.length} subtitle="<50%"
-          items={alerts.under.slice(0, 3).map(a => ({ name: a.user.name, meta: `${(a.value*100).toFixed(0)}%`, color: 'var(--warn)', userId: a.user.id }))}
+          count={alerts.under.length} subtitle="50% 미만"
+          items={alerts.under.map(a => ({ name: a.user.name, meta: `${(a.value*100).toFixed(0)}%`, color: 'var(--warn)', userId: a.user.id }))}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
         <AlertCard
@@ -174,7 +175,8 @@ function DashboardView({ onNavigate, dataVersion }) {
           iconBg="var(--bg-sunken)" iconColor="var(--text-muted)"
           help={helpTexts.leave}
           count={alerts.onLeave.length} subtitle="휴가·교육 등"
-          items={alerts.onLeave.slice(0, 3).map(a => ({ name: a.user.name, meta: a.note.substring(0, 10), color: 'var(--text-muted)', userId: a.user.id }))}
+          items={alerts.onLeave.map(a => ({ name: a.user.name, meta: a.note, color: 'var(--text-muted)', userId: a.user.id }))}
+          metaWrap={true}
           onItemClick={(item) => onNavigate('user', item.userId)}
         />
         <LevelCard activeUsers={activeUsers} />
@@ -320,29 +322,58 @@ function KpiCard({ label, value, unit, delta, deltaLabel, sparkData, sub, target
   );
 }
 
-function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick, help }) {
+function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemClick, help, metaWrap = false }) {
   return (
-    <div className="card" style={{ overflow: 'visible' }}>
-      <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <div style={{ width: 32, height: 32, borderRadius: 8, background: iconBg, color: iconColor, display: 'grid', placeItems: 'center' }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      {/* 헤더 */}
+      <div style={{ padding: '14px 18px 10px', display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>
+        <div style={{ width: 32, height: 32, borderRadius: 8, background: iconBg, color: iconColor, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Icon name="alert" size={16} />
         </div>
-        <div style={{ flex: 1 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div className="small bold" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             {title} <HelpTip text={help} />
           </div>
           <div className="tiny subtle">{subtitle}</div>
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: iconColor, lineHeight: 1 }}>{count}</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: iconColor, lineHeight: 1, flexShrink: 0 }}>{count}</div>
       </div>
-      <div style={{ padding: '4px 18px 14px' }}>
+
+      {/* 구분선 */}
+      <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
+
+      {/* 명단 — 세로 스크롤 허용 */}
+      <div style={{ overflowY: 'auto', maxHeight: 260, padding: '4px 0 10px' }}>
         {items.length === 0 ? (
-          <div className="tiny subtle" style={{ padding: '6px 0' }}>해당 없음 ✓</div>
+          <div className="tiny subtle" style={{ padding: '8px 18px' }}>해당 없음 ✓</div>
         ) : items.map((item, i) => (
-          <div key={i} style={{ padding: '5px 0', borderTop: i > 0 ? '1px solid var(--border)' : 'none', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => onItemClick(item)}>
-            <Avatar name={item.name} userId={item.userId} size="sm" />
-            <span className="small" style={{ flex: 1 }}>{item.name}</span>
-            <span className="tiny bold ellipsis" style={{ color: item.color, maxWidth: 80 }}>{item.meta}</span>
+          <div
+            key={i}
+            style={{
+              padding: '7px 18px',
+              borderTop: i > 0 ? '1px solid var(--border)' : 'none',
+              display: 'flex',
+              alignItems: metaWrap ? 'flex-start' : 'center',
+              gap: 10,
+              cursor: 'pointer',
+            }}
+            onClick={() => onItemClick(item)}
+          >
+            <div style={{ flexShrink: 0, paddingTop: metaWrap ? 1 : 0 }}>
+              <Avatar name={item.name} userId={item.userId} size="sm" />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div className="small" style={{ fontWeight: 500, lineHeight: 1.4 }}>{item.name}</div>
+              {metaWrap ? (
+                <div className="tiny" style={{ color: item.color, fontWeight: 600, marginTop: 2, lineHeight: 1.5, wordBreak: 'keep-all' }}>
+                  {item.meta}
+                </div>
+              ) : (
+                <div className="tiny" style={{ color: item.color, fontWeight: 700, marginTop: 1 }}>
+                  {item.meta}
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>

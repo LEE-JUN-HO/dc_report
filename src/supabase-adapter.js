@@ -96,7 +96,7 @@
       }
     }
 
-    const [tRes, uRes, utRes, pRes, opRes, orRes, asRes] = await Promise.all([
+    const [tRes, uRes, utRes, pRes, opRes, orRes, asRes, nRes] = await Promise.all([
       client.from('teams').select('*').order('sort_order'),
       client.from('users').select('*').order('id'),
       fetchAllRows('utilization', q => q.order('user_id').order('week_id')),
@@ -104,6 +104,7 @@
       client.from('outsourcing_partners').select('*').order('sort_order').order('id'),
       fetchAllRows('outsourcing_records', q => q.order('partner_id').order('month_id')),
       client.from('app_settings').select('*'),
+      client.from('notices').select('*').order('created_at', { ascending: false }),
     ]);
 
     if (tRes.error || uRes.error || utRes.error || pRes.error) {
@@ -113,6 +114,7 @@
     if (opRes.error) console.warn('[Resource Hub] outsourcing_partners 로드 실패 (마이그레이션 필요):', opRes.error.message);
     if (orRes.error) console.warn('[Resource Hub] outsourcing_records 로드 실패 (마이그레이션 필요):', orRes.error.message);
     if (asRes.error) console.warn('[Resource Hub] app_settings 로드 실패 (마이그레이션 필요):', asRes.error.message);
+    if (nRes.error)  console.warn('[Resource Hub] notices 로드 실패 (마이그레이션 필요):', nRes.error.message);
 
     const TEAMS = tRes.data.map(t => ({ id: t.id, name: t.name, color: t.color }));
     const USERS = uRes.data.map(u => ({
@@ -162,7 +164,12 @@
       (asRes.data || []).forEach(row => { APP_SETTINGS[row.key] = row.value; });
     }
 
-    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS, APP_SETTINGS });
+    // notices → 최신순 배열
+    const NOTICES = nRes.error ? [] : (nRes.data || []).map(r => ({
+      id: r.id, content: r.content, createdAt: r.created_at,
+    }));
+
+    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS, APP_SETTINGS, NOTICES });
     window.APP_DATA.SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
     window.__SUPABASE_CLIENT__ = client;
     window.__SUPABASE_CONNECTED__ = true;
@@ -320,6 +327,27 @@
       }
     };
 
+    window.APP_DATA.addNotice = async (content) => {
+      const res = await client
+        .from('notices')
+        .insert({ content, created_at: new Date().toISOString() })
+        .select('*')
+        .single();
+      throwIfError(res, 'notices 저장');
+      const item = { id: res.data.id, content: res.data.content, createdAt: res.data.created_at };
+      window.APP_DATA.NOTICES = [item, ...(window.APP_DATA.NOTICES || [])];
+      window.dispatchEvent(new CustomEvent('notice-changed'));
+      return item;
+    };
+    window.APP_DATA.deleteNotice = async (id) => {
+      throwIfError(
+        await client.from('notices').delete().eq('id', id),
+        'notices 삭제'
+      );
+      window.APP_DATA.NOTICES = (window.APP_DATA.NOTICES || []).filter(n => n.id !== id);
+      window.dispatchEvent(new CustomEvent('notice-changed'));
+    };
+
     window.APP_DATA.saveAppSetting = async (key, value) => {
       throwIfError(
         await client.from('app_settings').upsert(
@@ -351,6 +379,15 @@
         if (!res.error) {
           if (!window.APP_DATA.APP_SETTINGS) window.APP_DATA.APP_SETTINGS = {};
           (res.data || []).forEach(row => { window.APP_DATA.APP_SETTINGS[row.key] = row.value; });
+          window.dispatchEvent(new CustomEvent('notice-changed'));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notices' }, async () => {
+        const res = await client.from('notices').select('*').order('created_at', { ascending: false });
+        if (!res.error) {
+          window.APP_DATA.NOTICES = (res.data || []).map(r => ({
+            id: r.id, content: r.content, createdAt: r.created_at,
+          }));
           window.dispatchEvent(new CustomEvent('notice-changed'));
         }
       })

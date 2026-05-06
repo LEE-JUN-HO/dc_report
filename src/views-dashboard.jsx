@@ -254,52 +254,54 @@ function DashboardView({ onNavigate, dataVersion }) {
 }
 
 function NoticeCard() {
-  const STORAGE_KEY = 'dashboard_notice_text';
-  const SETTING_KEY = 'dashboard_notice';
-  const [text, setText] = React.useState('');
+  const [notices, setNotices] = React.useState([]);
+  const [writing, setWriting] = React.useState(false);
   const [draft, setDraft] = React.useState('');
-  const [editing, setEditing] = React.useState(false);
-  const [saved, setSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [expandedId, setExpandedId] = React.useState(null);
   const taRef = React.useRef(null);
 
-  const loadText = () => {
-    const fromSupabase = window.APP_DATA?.APP_SETTINGS?.[SETTING_KEY];
-    if (fromSupabase != null) return fromSupabase;
-    return localStorage.getItem(STORAGE_KEY) || '';
+  const fmtDate = (iso) => {
+    const d = new Date(iso);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return `${d.getMonth()+1}/${d.getDate()}(${days[d.getDay()]}) ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   };
 
+  const reload = () => setNotices([...(window.APP_DATA?.NOTICES || [])]);
+
   React.useEffect(() => {
-    setText(loadText());
-    const onDataChanged = () => setText(loadText());
-    const onNoticeChanged = () => setText(loadText());
-    window.addEventListener('data-changed', onDataChanged);
-    window.addEventListener('notice-changed', onNoticeChanged);
+    reload();
+    window.addEventListener('data-changed', reload);
+    window.addEventListener('notice-changed', reload);
     return () => {
-      window.removeEventListener('data-changed', onDataChanged);
-      window.removeEventListener('notice-changed', onNoticeChanged);
+      window.removeEventListener('data-changed', reload);
+      window.removeEventListener('notice-changed', reload);
     };
   }, []);
 
-  const startEdit = () => {
-    setDraft(loadText());
-    setEditing(true);
-    setSaved(false);
+  const startWrite = () => {
+    setDraft('');
+    setWriting(true);
     setTimeout(() => taRef.current && taRef.current.focus(), 0);
   };
 
   const handleSave = async () => {
+    if (!draft.trim()) return;
     setSaving(true);
     try {
-      if (window.APP_DATA?.saveAppSetting) {
-        await window.APP_DATA.saveAppSetting(SETTING_KEY, draft);
+      if (window.APP_DATA?.addNotice) {
+        await window.APP_DATA.addNotice(draft.trim());
       } else {
-        localStorage.setItem(STORAGE_KEY, draft);
+        // localStorage 폴백 (Supabase 미연결)
+        const list = JSON.parse(localStorage.getItem('notices_list') || '[]');
+        list.unshift({ id: Date.now(), content: draft.trim(), createdAt: new Date().toISOString() });
+        localStorage.setItem('notices_list', JSON.stringify(list));
+        if (!window.APP_DATA.NOTICES) window.APP_DATA.NOTICES = [];
+        window.APP_DATA.NOTICES = list;
+        reload();
       }
-      setText(draft);
-      setEditing(false);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setDraft('');
+      setWriting(false);
     } catch (e) {
       alert('저장 실패: ' + e.message);
     } finally {
@@ -307,75 +309,120 @@ function NoticeCard() {
     }
   };
 
-  const handleCancel = () => {
-    setDraft(text);
-    setEditing(false);
+  const handleDelete = async (id) => {
+    if (!confirm('삭제하시겠습니까?')) return;
+    try {
+      if (window.APP_DATA?.deleteNotice) {
+        await window.APP_DATA.deleteNotice(id);
+      } else {
+        const list = JSON.parse(localStorage.getItem('notices_list') || '[]').filter(n => n.id !== id);
+        localStorage.setItem('notices_list', JSON.stringify(list));
+        window.APP_DATA.NOTICES = list;
+        reload();
+      }
+      if (expandedId === id) setExpandedId(null);
+    } catch (e) {
+      alert('삭제 실패: ' + e.message);
+    }
   };
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
       {/* 헤더 */}
       <div style={{ padding: '14px 18px 10px', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1 }}>
           <div className="small bold">공지 · 메모</div>
-          <div className="tiny subtle">{saved ? '✓ 저장됨' : '팀 공유 메모'}</div>
+          <div className="tiny subtle">팀 공유 · {notices.length}건</div>
         </div>
-        {!editing && (
-          <button
-            onClick={startEdit}
-            style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--canvas)', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}
-          >
-            <Icon name="edit" size={12} /> 편집
+        {!writing && (
+          <button onClick={startWrite} style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 10px', borderRadius: 6,
+            border: '1px solid var(--blue-500)', background: 'transparent',
+            color: 'var(--blue-500)', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          }}>
+            <Icon name="plus" size={12} /> 작성
           </button>
         )}
       </div>
       <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
 
-      {/* 본문 */}
-      {editing ? (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '10px 14px 12px', gap: 8 }}>
+      {/* 작성 폼 */}
+      {writing && (
+        <div style={{ padding: '10px 14px 10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
           <textarea
             ref={taRef}
             value={draft}
             onChange={e => setDraft(e.target.value)}
             placeholder="공지사항, 팀 메모 등을 입력하세요..."
+            rows={3}
             style={{
-              flex: 1,
-              minHeight: 120,
-              resize: 'none',
-              border: '1px solid var(--border-strong)',
-              borderRadius: 6,
-              padding: '8px 10px',
-              fontSize: 14,
-              lineHeight: 1.7,
-              outline: 'none',
-              fontFamily: 'inherit',
-              color: 'var(--text)',
-              background: 'var(--bg-sunken)',
-              boxSizing: 'border-box',
-              width: '100%',
+              width: '100%', resize: 'none', boxSizing: 'border-box',
+              border: '1px solid var(--border-strong)', borderRadius: 6,
+              padding: '7px 10px', fontSize: 13, lineHeight: 1.6,
+              outline: 'none', fontFamily: 'inherit',
+              color: 'var(--text)', background: 'var(--bg-sunken)',
             }}
           />
-          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button onClick={handleCancel}
-              style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 13, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', marginTop: 6 }}>
+            <button onClick={() => { setWriting(false); setDraft(''); }}
+              style={{ padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)', fontSize: 12, cursor: 'pointer' }}>
               취소
             </button>
-            <button onClick={handleSave} disabled={saving}
-              style={{ padding: '5px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.7 : 1 }}>
-              {saving ? '저장 중…' : '저장'}
+            <button onClick={handleSave} disabled={saving || !draft.trim()}
+              style={{ padding: '4px 14px', borderRadius: 6, border: 'none', background: 'var(--blue-500)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: (saving || !draft.trim()) ? 0.6 : 1 }}>
+              {saving ? '저장 중…' : '등록'}
             </button>
           </div>
         </div>
-      ) : (
-        <div style={{ flex: 1, padding: '10px 18px 14px', overflowY: 'auto' }}>
-          {text ? (
-            <div style={{ fontSize: 14, lineHeight: 1.75, whiteSpace: 'pre-wrap', color: 'var(--text)' }}>{text}</div>
-          ) : (
-            <div style={{ fontSize: 13, color: 'var(--text-subtle)', marginTop: 4 }}>편집 버튼을 눌러 공지나 메모를 입력하세요.</div>
-          )}
-        </div>
       )}
+
+      {/* 목록 */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {notices.length === 0 ? (
+          <div style={{ padding: '16px 18px', fontSize: 13, color: 'var(--text-subtle)' }}>
+            + 작성 버튼을 눌러 첫 번째 메모를 남겨보세요.
+          </div>
+        ) : notices.map((n, i) => {
+          const isExpanded = expandedId === n.id;
+          return (
+            <div key={n.id}
+              style={{ borderTop: i > 0 ? '1px solid var(--border)' : 'none', padding: '8px 14px' }}>
+              {/* 날짜 + 삭제 */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <span style={{ fontSize: 11, color: 'var(--text-subtle)', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmtDate(n.createdAt)}
+                </span>
+                <span style={{ flex: 1 }} />
+                <button onClick={() => handleDelete(n.id)} style={{
+                  display: 'flex', alignItems: 'center', padding: '1px 4px',
+                  border: 'none', background: 'none', color: 'var(--text-subtle)',
+                  cursor: 'pointer', borderRadius: 4, fontSize: 11,
+                }} title="삭제">
+                  <Icon name="trash" size={11} />
+                </button>
+              </div>
+              {/* 내용 (접기/펼치기) */}
+              <div
+                onClick={() => setExpandedId(isExpanded ? null : n.id)}
+                style={{
+                  fontSize: 13, lineHeight: 1.65, color: 'var(--text)',
+                  whiteSpace: 'pre-wrap', cursor: 'pointer',
+                  display: '-webkit-box', WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: isExpanded ? 'unset' : 2,
+                  overflow: isExpanded ? 'visible' : 'hidden',
+                }}
+              >
+                {n.content}
+              </div>
+              {!isExpanded && n.content.length > 60 && (
+                <span style={{ fontSize: 11, color: 'var(--blue-500)', cursor: 'pointer' }}
+                  onClick={() => setExpandedId(n.id)}>더 보기</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -62,10 +62,24 @@ function DashboardView({ onNavigate, dataVersion }) {
   // 지난 12주 + 향후 8주 트렌드
   const trend = useMemoDash(() => {
     const slice = WEEKS.slice(Math.max(0, curIdx - 11), Math.min(WEEKS.length, curIdx + 9));
-    return slice.map((w, idx) => {
-      const vals = USERS.filter(u => isUserInUtilizationBase(u, w)).map(u => computeUtilization(u.id, w.id).value);
-      const avg = vals.reduce((a,b)=>a+b,0) / (vals.length || 1);
-      return { label: w.label, value: avg, isCurrent: w.num - 1 === curIdx, isFuture: w.num - 1 > curIdx };
+    return slice.map((w) => {
+      const baseUsers = USERS.filter(u => isUserInUtilizationBase(u, w));
+      const entries = baseUsers.map(u => ({ user: u, d: computeUtilization(u.id, w.id) }));
+      const avg = entries.reduce((s, e) => s + e.d.value, 0) / (entries.length || 1);
+      const isFuture = w.num - 1 > curIdx;
+      const overCount  = entries.filter(e => e.d.value > 1.0).length;
+      const freeCount  = entries.filter(e => e.d.hasValue && Number(e.d.value) === 0 && !(e.d.note && !e.d.client)).length;
+      const underCount = entries.filter(e => {
+        const d = e.d;
+        const isFreeEntry = d.hasValue && Number(d.value) === 0 && !(d.note && !d.client);
+        const isLeave = !!d.note && !d.client;
+        return d.value < 0.5 && !isFreeEntry && !isLeave;
+      }).length;
+      return {
+        label: w.label, range: w.range, value: avg,
+        count: baseUsers.length, overCount, underCount, freeCount,
+        isCurrent: w.num - 1 === curIdx, isFuture,
+      };
     });
   }, [dataVersion]);
 
@@ -360,31 +374,99 @@ function StatusPill({ status }) {
 }
 
 function TrendChart({ data, height = 300 }) {
+  const [ttIdx, setTtIdx] = React.useState(null);
   const W = 720, H = height, PAD = 30;
   const maxY = 1.1;
   const y = v => H - PAD - (v / maxY) * (H - PAD * 2);
   const x = i => PAD + (i / (data.length - 1)) * (W - PAD * 2);
-  const realPts = data.map((d, i) => ({ ...d, _i: i })).filter(d => !d.isFuture || d.isCurrent);
-  const futurePts = data.map((d, i) => ({ ...d, _i: i })).filter(d => d.isFuture || d.isCurrent);
+  const realPts   = data.map((d, i) => ({ ...d, _i: i })).filter(d => !d.isFuture || d.isCurrent);
+  const futurePts = data.map((d, i) => ({ ...d, _i: i })).filter(d => d.isFuture  || d.isCurrent);
   const toPts = arr => arr.map(d => `${x(d._i)},${y(d.value)}`).join(' ');
+
+  const ttd  = ttIdx != null ? data[ttIdx] : null;
+  const ttCX = ttIdx != null ? x(ttIdx) : 0;
+  const ttCY = ttIdx != null ? y(data[ttIdx].value) : 0;
+  const TT_W = 168;
+  const ttRows = ttd ? [
+    ttd.range ? `${ttd.label} (${ttd.range})` : ttd.label,
+    null, // value row handled separately
+    ttd.count  != null ? `대상 ${ttd.count}명` : null,
+    ttd.overCount  > 0 ? `과부하 ${ttd.overCount}명 (100% 초과)` : null,
+    ttd.underCount > 0 ? `저활용 ${ttd.underCount}명 (50% 미만)` : null,
+    ttd.freeCount  > 0 ? `무상투입 ${ttd.freeCount}명` : null,
+  ].filter(r => r !== null) : [];
+  const TT_H = 20 + ttRows.length * 15 + 5;
+  const ttX = ttCX + TT_W + 14 > W ? ttCX - TT_W - 8 : ttCX + 10;
+  const ttY = Math.max(PAD, Math.min(H - TT_H - PAD, ttCY - TT_H / 2));
+
   return (
-    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', minHeight: H }}>
+    <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+      style={{ display: 'block', minHeight: H }}>
+      {/* 격자선 */}
       {[0, 0.5, 0.85, 1.0].map(t => (
         <g key={t}>
-          <line x1={PAD} x2={W-PAD} y1={y(t)} y2={y(t)} stroke={t === 0.85 ? 'var(--success)' : 'var(--border)'} strokeDasharray={t === 0.85 ? '0' : '3 3'} strokeWidth={t === 0.85 ? 1 : 1} opacity={t === 0.85 ? 0.5 : 0.4} />
-          <text x={8} y={y(t) + 3} fontSize="10" fill={t === 0.85 ? 'var(--success)' : 'var(--text-subtle)'} fontWeight={t === 0.85 ? 700 : 400}>{(t*100).toFixed(0)}%</text>
+          <line x1={PAD} x2={W-PAD} y1={y(t)} y2={y(t)}
+            stroke={t === 0.85 ? '#00C471' : '#E5E8EB'}
+            strokeDasharray={t === 0.85 ? '0' : '3 3'}
+            strokeWidth="1" opacity={t === 0.85 ? 0.7 : 0.5} />
+          <text x={8} y={y(t) + 3} fontSize="10"
+            fill={t === 0.85 ? '#00C471' : '#8B95A1'}
+            fontWeight={t === 0.85 ? 700 : 400}>{(t*100).toFixed(0)}%</text>
         </g>
       ))}
-      {realPts.length > 1 && <polyline points={toPts(realPts)} fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinejoin="round" />}
-      {futurePts.length > 1 && <polyline points={toPts(futurePts)} fill="none" stroke="var(--text-subtle)" strokeWidth="1.5" strokeDasharray="4 3" strokeLinejoin="round" />}
+      {/* 실적선 */}
+      {realPts.length > 1 && (
+        <polyline points={toPts(realPts)} fill="none" stroke="#3182F6" strokeWidth="2.5" strokeLinejoin="round" />
+      )}
+      {/* 계획선 (점선) */}
+      {futurePts.length > 1 && (
+        <polyline points={toPts(futurePts)} fill="none" stroke="#8B95A1" strokeWidth="1.5" strokeDasharray="5 3" strokeLinejoin="round" />
+      )}
+      {/* 데이터 포인트 + 히트영역 */}
       {data.map((d, i) => (
-        <g key={i}>
-          <circle cx={x(i)} cy={y(d.value)} r={d.isCurrent ? 4 : 2.5} fill={d.isCurrent ? 'var(--accent)' : d.isFuture ? 'white' : 'white'} stroke={d.isFuture ? 'var(--text-subtle)' : 'var(--accent)'} strokeWidth="2" />
+        <g key={i} style={{ cursor: 'pointer' }}
+          onMouseEnter={() => setTtIdx(i)}
+          onMouseLeave={() => setTtIdx(null)}>
+          {/* 투명 히트 영역 */}
+          <circle cx={x(i)} cy={y(d.value)} r={12} fill="transparent" />
+          <circle
+            cx={x(i)} cy={y(d.value)}
+            r={d.isCurrent ? 5 : ttIdx === i ? 4 : 3}
+            fill="white"
+            stroke={d.isFuture && !d.isCurrent ? '#8B95A1' : '#3182F6'}
+            strokeWidth="2"
+          />
           {(i % 3 === 0 || d.isCurrent) && (
-            <text x={x(i)} y={H-6} fontSize="9" fill={d.isCurrent ? 'var(--accent-strong)' : 'var(--text-subtle)'} textAnchor="middle" fontWeight={d.isCurrent ? 700 : 400}>{d.label}</text>
+            <text x={x(i)} y={H - 6} fontSize="9"
+              fill={d.isCurrent ? '#3182F6' : '#8B95A1'}
+              textAnchor="middle"
+              fontWeight={d.isCurrent ? 700 : 400}>{d.label}</text>
           )}
         </g>
       ))}
+      {/* 툴팁 */}
+      {ttd && (
+        <g style={{ pointerEvents: 'none' }}>
+          <rect x={ttX} y={ttY} width={TT_W} height={TT_H} rx={6} fill="#191F28" opacity="0.94" />
+          {/* 헤더 */}
+          <text x={ttX + 10} y={ttY + 14} fontSize="10" fill="#8B95A1">{ttd.isFuture && !ttd.isCurrent ? '계획' : '실적'}</text>
+          <text x={ttX + TT_W - 10} y={ttY + 14} fontSize="10" fill="#8B95A1" textAnchor="end">{ttd.range || ''}</text>
+          {/* 가동률 */}
+          <text x={ttX + 10} y={ttY + 30} fontSize="14" fill="white" fontWeight="700">
+            {(ttd.value * 100).toFixed(1)}%
+            <tspan fontSize="10" fill="#8B95A1" dx="4">{ttd.label}</tspan>
+          </text>
+          {/* 상세 행 */}
+          {[
+            ttd.count  != null ? { text: `대상 ${ttd.count}명`,          color: '#8B95A1' } : null,
+            ttd.overCount  > 0 ? { text: `과부하 ${ttd.overCount}명 (100% 초과)`,  color: '#F04452' } : null,
+            ttd.underCount > 0 ? { text: `저활용 ${ttd.underCount}명 (50% 미만)`,  color: '#F5A623' } : null,
+            ttd.freeCount  > 0 ? { text: `무상투입 ${ttd.freeCount}명`,   color: '#6B7684' } : null,
+          ].filter(Boolean).map((row, ri) => (
+            <text key={ri} x={ttX + 10} y={ttY + 45 + ri * 15} fontSize="10" fill={row.color}>{row.text}</text>
+          ))}
+        </g>
+      )}
     </svg>
   );
 }

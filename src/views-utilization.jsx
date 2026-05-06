@@ -75,19 +75,26 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const summaryStats = useMemoU(() => {
     const avgOf = (filterFn) => {
       const ws = WEEKS.filter(filterFn);
-      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
+      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0, underUsers: [] };
       let sum = 0, n = 0, over = 0, under = 0;
+      const underUsers = [];
       ws.forEach(w => {
         USERS.filter(u => isUserInUtilizationBase(u, w)).forEach(u => {
-          const v = computeUtilization(u.id, w.id).value;
+          const d = computeUtilization(u.id, w.id);
+          const v = d.value;
           sum += v; n++;
           if (ws.length === 1) {
-            if (v > 1.0) over++;
-            else if (v < 0.5) under++;
+            if (v > 1.0) {
+              over++;
+            } else if (v < 0.5 && !isZeroBillingWork(d) && !isAbsence(d)) {
+              // 대시보드와 동일 기준: 무상투입·부재 제외
+              under++;
+              underUsers.push({ user: u, value: v });
+            }
           }
         });
       });
-      return { avg: sum / (n || 1), overCount: over, underCount: under };
+      return { avg: sum / (n || 1), overCount: over, underCount: under, underUsers };
     };
     const cm = weekPeriodMonth(currentWeek);
     const cy = weekPeriodYear(currentWeek);
@@ -521,9 +528,7 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
               </span>
             )}
             {stats.week.underCount > 0 && (
-              <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
-                저활용 {stats.week.underCount}명
-              </span>
+              <UnderBadge count={stats.week.underCount} users={stats.week.underUsers || []} />
             )}
           </>
         )}
@@ -534,6 +539,48 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function UnderBadge({ count, users }) {
+  const [open, setOpen] = useStateU(false);
+  return (
+    <span
+      className="badge"
+      style={{ background: 'var(--warn-weak)', color: 'var(--warn)', cursor: 'pointer', position: 'relative' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      저활용 {count}명
+      {open && (
+        <span style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: '#191F28', color: 'white',
+          borderRadius: 8, padding: '10px 14px',
+          fontSize: 12, fontWeight: 400, lineHeight: 1.7,
+          whiteSpace: 'nowrap', zIndex: 200,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          minWidth: 200,
+          pointerEvents: 'none',
+        }}>
+          <span style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: '#F5A623' }}>
+            저활용 기준
+          </span>
+          <span style={{ display: 'block', color: '#8B95A1', marginBottom: 8, fontSize: 11 }}>
+            이번 주 가동률 50% 미만<br />
+            (무상투입·부재 제외)
+          </span>
+          {users.length === 0 ? (
+            <span style={{ color: '#8B95A1' }}>해당 없음</span>
+          ) : users.map((item, i) => (
+            <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '2px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+              <span>{item.user.name}</span>
+              <span style={{ color: '#F5A623', fontWeight: 600 }}>{(item.value * 100).toFixed(0)}%</span>
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 

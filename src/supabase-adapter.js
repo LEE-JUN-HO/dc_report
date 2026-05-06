@@ -96,7 +96,7 @@
       }
     }
 
-    const [tRes, uRes, utRes, pRes, opRes, orRes, asRes, nRes] = await Promise.all([
+    const [tRes, uRes, utRes, pRes, opRes, orRes, asRes, nRes, ncRes] = await Promise.all([
       client.from('teams').select('*').order('sort_order'),
       client.from('users').select('*').order('id'),
       fetchAllRows('utilization', q => q.order('user_id').order('week_id')),
@@ -105,6 +105,7 @@
       fetchAllRows('outsourcing_records', q => q.order('partner_id').order('month_id')),
       client.from('app_settings').select('*'),
       client.from('notices').select('*').order('created_at', { ascending: false }),
+      client.from('notice_comments').select('*').order('created_at'),
     ]);
 
     if (tRes.error || uRes.error || utRes.error || pRes.error) {
@@ -115,6 +116,7 @@
     if (orRes.error) console.warn('[Resource Hub] outsourcing_records 로드 실패 (마이그레이션 필요):', orRes.error.message);
     if (asRes.error) console.warn('[Resource Hub] app_settings 로드 실패 (마이그레이션 필요):', asRes.error.message);
     if (nRes.error)  console.warn('[Resource Hub] notices 로드 실패 (마이그레이션 필요):', nRes.error.message);
+    if (ncRes.error) console.warn('[Resource Hub] notice_comments 로드 실패 (마이그레이션 필요):', ncRes.error.message);
 
     const TEAMS = tRes.data.map(t => ({ id: t.id, name: t.name, color: t.color }));
     const USERS = uRes.data.map(u => ({
@@ -164,12 +166,21 @@
       (asRes.data || []).forEach(row => { APP_SETTINGS[row.key] = row.value; });
     }
 
-    // notices → 최신순 배열
+    // notices → 최신순 배열 (author 포함)
     const NOTICES = nRes.error ? [] : (nRes.data || []).map(r => ({
-      id: r.id, content: r.content, createdAt: r.created_at,
+      id: r.id, content: r.content, author: r.author || '', createdAt: r.created_at,
     }));
 
-    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS, APP_SETTINGS, NOTICES });
+    // notice_comments → notice_id별 그룹
+    const NOTICE_COMMENTS = {};
+    if (!ncRes.error) {
+      (ncRes.data || []).forEach(r => {
+        if (!NOTICE_COMMENTS[r.notice_id]) NOTICE_COMMENTS[r.notice_id] = [];
+        NOTICE_COMMENTS[r.notice_id].push({ id: r.id, noticeId: r.notice_id, author: r.author || '', content: r.content, createdAt: r.created_at });
+      });
+    }
+
+    Object.assign(window.APP_DATA, { TEAMS, USERS, UTIL, PIPELINE, OUTSOURCING_PARTNERS, OUTSOURCING_RECORDS, APP_SETTINGS, NOTICES, NOTICE_COMMENTS });
     window.APP_DATA.SALES_PEOPLE = [...new Set(PIPELINE.map(p => p.sales).filter(Boolean))];
     window.__SUPABASE_CLIENT__ = client;
     window.__SUPABASE_CONNECTED__ = true;
@@ -327,14 +338,14 @@
       }
     };
 
-    window.APP_DATA.addNotice = async (content) => {
+    window.APP_DATA.addNotice = async (content, author) => {
       const res = await client
         .from('notices')
-        .insert({ content, created_at: new Date().toISOString() })
+        .insert({ content, author: author || null, created_at: new Date().toISOString() })
         .select('*')
         .single();
       throwIfError(res, 'notices 저장');
-      const item = { id: res.data.id, content: res.data.content, createdAt: res.data.created_at };
+      const item = { id: res.data.id, content: res.data.content, author: res.data.author || '', createdAt: res.data.created_at };
       window.APP_DATA.NOTICES = [item, ...(window.APP_DATA.NOTICES || [])];
       window.dispatchEvent(new CustomEvent('notice-changed'));
       return item;
@@ -345,6 +356,32 @@
         'notices 삭제'
       );
       window.APP_DATA.NOTICES = (window.APP_DATA.NOTICES || []).filter(n => n.id !== id);
+      const nc = window.APP_DATA.NOTICE_COMMENTS || {};
+      delete nc[id];
+      window.dispatchEvent(new CustomEvent('notice-changed'));
+    };
+    window.APP_DATA.addNoticeComment = async (noticeId, content, author) => {
+      const res = await client
+        .from('notice_comments')
+        .insert({ notice_id: noticeId, content, author: author || null, created_at: new Date().toISOString() })
+        .select('*')
+        .single();
+      throwIfError(res, 'notice_comments 저장');
+      const item = { id: res.data.id, noticeId: res.data.notice_id, author: res.data.author || '', content: res.data.content, createdAt: res.data.created_at };
+      if (!window.APP_DATA.NOTICE_COMMENTS) window.APP_DATA.NOTICE_COMMENTS = {};
+      if (!window.APP_DATA.NOTICE_COMMENTS[noticeId]) window.APP_DATA.NOTICE_COMMENTS[noticeId] = [];
+      window.APP_DATA.NOTICE_COMMENTS[noticeId] = [...window.APP_DATA.NOTICE_COMMENTS[noticeId], item];
+      window.dispatchEvent(new CustomEvent('notice-changed'));
+      return item;
+    };
+    window.APP_DATA.deleteNoticeComment = async (id, noticeId) => {
+      throwIfError(
+        await client.from('notice_comments').delete().eq('id', id),
+        'notice_comments 삭제'
+      );
+      if (window.APP_DATA.NOTICE_COMMENTS?.[noticeId]) {
+        window.APP_DATA.NOTICE_COMMENTS[noticeId] = window.APP_DATA.NOTICE_COMMENTS[noticeId].filter(c => c.id !== id);
+      }
       window.dispatchEvent(new CustomEvent('notice-changed'));
     };
 

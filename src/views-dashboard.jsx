@@ -248,17 +248,17 @@ function LevelCard({ activeUsers }) {
   LEVELS.forEach(l => counts[l] = 0);
   activeUsers.forEach(u => counts[u.level] = (counts[u.level] || 0) + 1);
   return (
-    <div className="card">
-      <div style={{ padding: '14px 18px 10px' }}>
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ padding: '14px 18px 10px', flexShrink: 0 }}>
         <div className="small bold">등급 구성</div>
         <div className="tiny subtle">재직자 {activeUsers.length}명</div>
       </div>
-      <div style={{ padding: '0 18px 14px' }}>
+      <div style={{ padding: '4px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         {LEVELS.map(l => (
-          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: LEVEL_COLORS[l] }}></span>
-            <span className="small" style={{ flex: 1 }}>{l}</span>
-            <span className="small num bold">{counts[l]}</span>
+          <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: LEVEL_COLORS[l], flexShrink: 0 }}></span>
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 500 }}>{l}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{counts[l]}</span>
           </div>
         ))}
       </div>
@@ -343,7 +343,7 @@ function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemCli
       <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
 
       {/* 명단 — 4명까지 표시, 초과 시 세로 스크롤 */}
-      <div style={{ overflowY: 'auto', maxHeight: metaWrap ? 228 : 204, padding: '4px 0 10px' }}>
+      <div style={{ overflowY: 'auto', maxHeight: metaWrap ? 228 : 212, padding: 0 }}>
         {items.length === 0 ? (
           <div className="tiny subtle" style={{ padding: '8px 18px' }}>해당 없음 ✓</div>
         ) : items.map((item, i) => (

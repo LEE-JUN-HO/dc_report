@@ -62,13 +62,17 @@ function DashboardView({ onNavigate, dataVersion }) {
   // 지난 12주 + 향후 8주 트렌드
   const trend = useMemoDash(() => {
     const slice = WEEKS.slice(Math.max(0, curIdx - 11), Math.min(WEEKS.length, curIdx + 9));
-    return slice.map((w) => {
+    const raw = slice.map((w) => {
       const baseUsers = USERS.filter(u => isUserInUtilizationBase(u, w));
       const entries = baseUsers.map(u => ({ user: u, d: computeUtilization(u.id, w.id) }));
-      const avg = entries.reduce((s, e) => s + e.d.value, 0) / (entries.length || 1);
+      const numerator = entries.reduce((s, e) => s + e.d.value, 0);
+      const denominator = baseUsers.length;
+      const avg = numerator / (denominator || 1);
       const isFuture = w.num - 1 > curIdx;
       const overCount  = entries.filter(e => e.d.value > 1.0).length;
       const freeCount  = entries.filter(e => e.d.hasValue && Number(e.d.value) === 0 && !(e.d.note && !e.d.client)).length;
+      const leaveCount = entries.filter(e => !!e.d.note && !e.d.client).length;
+      const waitCount  = entries.filter(e => e.d.empty === true).length;
       const underCount = entries.filter(e => {
         const d = e.d;
         const isFreeEntry = d.hasValue && Number(d.value) === 0 && !(d.note && !d.client);
@@ -77,10 +81,12 @@ function DashboardView({ onNavigate, dataVersion }) {
       }).length;
       return {
         label: w.label, range: w.range, value: avg,
-        count: baseUsers.length, overCount, underCount, freeCount,
+        numerator, denominator,
+        count: baseUsers.length, overCount, underCount, freeCount, leaveCount, waitCount,
         isCurrent: w.num - 1 === curIdx, isFuture,
       };
     });
+    return raw.map((d, i) => ({ ...d, delta: i > 0 ? d.value - raw[i - 1].value : null }));
   }, [dataVersion]);
 
   const alerts = useMemoDash(() => {
@@ -423,18 +429,75 @@ function TrendChart({ data, height = 300 }) {
   const ttd  = ttIdx != null ? data[ttIdx] : null;
   const ttCX = ttIdx != null ? x(ttIdx) : 0;
   const ttCY = ttIdx != null ? y(data[ttIdx].value) : 0;
-  const TT_W = 168;
-  const ttRows = ttd ? [
-    ttd.range ? `${ttd.label} (${ttd.range})` : ttd.label,
-    null, // value row handled separately
-    ttd.count  != null ? `대상 ${ttd.count}명` : null,
-    ttd.overCount  > 0 ? `과부하 ${ttd.overCount}명 (100% 초과)` : null,
-    ttd.underCount > 0 ? `저활용 ${ttd.underCount}명 (50% 미만)` : null,
-    ttd.freeCount  > 0 ? `무상투입 ${ttd.freeCount}명` : null,
-  ].filter(r => r !== null) : [];
-  const TT_H = 20 + ttRows.length * 15 + 5;
+  const TT_W = 204;
+
+  const ttDetail = ttd ? (() => {
+    const detailRows = [
+      ttd.overCount  > 0 ? { label: '과부하 (100%↑)', value: `${ttd.overCount}명`,  color: '#F04452' } : null,
+      ttd.underCount > 0 ? { label: '저활용 (50%↓)',  value: `${ttd.underCount}명`, color: '#F5A623' } : null,
+      ttd.freeCount  > 0 ? { label: '무상투입',        value: `${ttd.freeCount}명`,  color: '#3B82F6' } : null,
+      ttd.leaveCount > 0 ? { label: '부재',            value: `${ttd.leaveCount}명`, color: '#A78BFA' } : null,
+      ttd.waitCount  > 0 ? { label: '대기 (미입력)',   value: `${ttd.waitCount}명`,  color: '#6B7684' } : null,
+    ].filter(Boolean);
+    const hasDelta = ttd.delta != null;
+    const N = detailRows.length;
+    const TT_H = 10 + 14 + 6 + 18 + (hasDelta ? 16 : 0) + 4 + 16 + 16 + (N > 0 ? 4 + N * 16 - 2 : 0) + 10;
+    return { detailRows, hasDelta, TT_H };
+  })() : null;
+
+  const TT_H = ttDetail ? ttDetail.TT_H : 0;
   const ttX = ttCX + TT_W + 14 > W ? ttCX - TT_W - 8 : ttCX + 10;
-  const ttY = Math.max(PAD, Math.min(H - TT_H - PAD, ttCY - TT_H / 2));
+  const ttY = ttd ? Math.max(PAD, Math.min(H - TT_H - PAD, ttCY - TT_H / 2)) : 0;
+
+  const renderTooltip = () => {
+    if (!ttd || !ttDetail) return null;
+    const els = [];
+    let cy = ttY + 10;
+
+    cy += 14;
+    els.push(<text key="hk" x={ttX+10} y={cy} fontSize="10" fill="#8B95A1">{ttd.isFuture && !ttd.isCurrent ? '계획' : '실적'} · {ttd.label}</text>);
+    els.push(<text key="hr" x={ttX+TT_W-10} y={cy} fontSize="10" fill="#8B95A1" textAnchor="end">{ttd.range||''}</text>);
+    cy += 6;
+    els.push(<line key="s1" x1={ttX+8} x2={ttX+TT_W-8} y1={cy} y2={cy} stroke="#2D3A4A" strokeWidth="1"/>);
+    cy += 18;
+
+    els.push(<text key="v" x={ttX+10} y={cy} fontSize="16" fill="white" fontWeight="700">{(ttd.value*100).toFixed(1)}%</text>);
+
+    if (ttDetail.hasDelta) {
+      cy += 16;
+      const dSign = ttd.delta >= 0 ? '+' : '';
+      const dColor = ttd.delta > 0.005 ? '#00C471' : ttd.delta < -0.005 ? '#F04452' : '#8B95A1';
+      els.push(<text key="dt" x={ttX+10} y={cy} fontSize="10" fill={dColor}>직전 주 대비 {dSign}{(ttd.delta*100).toFixed(1)}%p</text>);
+    }
+
+    cy += 4;
+    els.push(<line key="s2" x1={ttX+8} x2={ttX+TT_W-8} y1={cy} y2={cy} stroke="#2D3A4A" strokeWidth="1"/>);
+    cy += 16;
+
+    els.push(<text key="cl" x={ttX+10} y={cy} fontSize="10" fill="#8B95A1">계산 모수 (분모)</text>);
+    els.push(<text key="cr" x={ttX+TT_W-10} y={cy} fontSize="10" fill="white" textAnchor="end">{ttd.denominator}명</text>);
+    cy += 16;
+    els.push(<text key="fl" x={ttX+10} y={cy} fontSize="10" fill="#8B95A1">빌링 합계 (분자)</text>);
+    els.push(<text key="fr" x={ttX+TT_W-10} y={cy} fontSize="10" fill="white" textAnchor="end">{ttd.numerator != null ? ttd.numerator.toFixed(1) : '0.0'} FTE</text>);
+
+    if (ttDetail.detailRows.length > 0) {
+      cy += 4;
+      els.push(<line key="s3" x1={ttX+8} x2={ttX+TT_W-8} y1={cy} y2={cy} stroke="#2D3A4A" strokeWidth="1"/>);
+      ttDetail.detailRows.forEach((row, ri) => {
+        cy += 14;
+        els.push(<text key={`dl${ri}`} x={ttX+10} y={cy} fontSize="10" fill={row.color}>{row.label}</text>);
+        els.push(<text key={`dr${ri}`} x={ttX+TT_W-10} y={cy} fontSize="10" fill={row.color} textAnchor="end">{row.value}</text>);
+        if (ri < ttDetail.detailRows.length - 1) cy += 2;
+      });
+    }
+
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <rect x={ttX} y={ttY} width={TT_W} height={TT_H} rx={6} fill="#191F28" opacity="0.95" />
+        {els}
+      </g>
+    );
+  };
 
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
@@ -464,7 +527,6 @@ function TrendChart({ data, height = 300 }) {
         <g key={i} style={{ cursor: 'pointer' }}
           onMouseEnter={() => setTtIdx(i)}
           onMouseLeave={() => setTtIdx(null)}>
-          {/* 투명 히트 영역 */}
           <circle cx={x(i)} cy={y(d.value)} r={12} fill="transparent" />
           <circle
             cx={x(i)} cy={y(d.value)}
@@ -482,28 +544,7 @@ function TrendChart({ data, height = 300 }) {
         </g>
       ))}
       {/* 툴팁 */}
-      {ttd && (
-        <g style={{ pointerEvents: 'none' }}>
-          <rect x={ttX} y={ttY} width={TT_W} height={TT_H} rx={6} fill="#191F28" opacity="0.94" />
-          {/* 헤더 */}
-          <text x={ttX + 10} y={ttY + 14} fontSize="10" fill="#8B95A1">{ttd.isFuture && !ttd.isCurrent ? '계획' : '실적'}</text>
-          <text x={ttX + TT_W - 10} y={ttY + 14} fontSize="10" fill="#8B95A1" textAnchor="end">{ttd.range || ''}</text>
-          {/* 가동률 */}
-          <text x={ttX + 10} y={ttY + 30} fontSize="14" fill="white" fontWeight="700">
-            {(ttd.value * 100).toFixed(1)}%
-            <tspan fontSize="10" fill="#8B95A1" dx="4">{ttd.label}</tspan>
-          </text>
-          {/* 상세 행 */}
-          {[
-            ttd.count  != null ? { text: `대상 ${ttd.count}명`,          color: '#8B95A1' } : null,
-            ttd.overCount  > 0 ? { text: `과부하 ${ttd.overCount}명 (100% 초과)`,  color: '#F04452' } : null,
-            ttd.underCount > 0 ? { text: `저활용 ${ttd.underCount}명 (50% 미만)`,  color: '#F5A623' } : null,
-            ttd.freeCount  > 0 ? { text: `무상투입 ${ttd.freeCount}명`,   color: '#6B7684' } : null,
-          ].filter(Boolean).map((row, ri) => (
-            <text key={ri} x={ttX + 10} y={ttY + 45 + ri * 15} fontSize="10" fill={row.color}>{row.text}</text>
-          ))}
-        </g>
-      )}
+      {renderTooltip()}
     </svg>
   );
 }

@@ -1,18 +1,23 @@
 // 설정 — 팀/인원 관리
-const { useState: useStateS } = React;
+const { useState: useStateS, useEffect: useEffectS } = React;
 
 function SettingsView(props) {
   const [tab, setTab] = useStateS('teams');
+  const isAdmin = window.__RESOURCE_HUB_AUTH__?.status === 'admin';
   return (
     <div className="col gap-16">
       <div className="segmented" style={{ alignSelf: 'flex-start' }}>
-        <button className={tab === 'teams' ? 'active' : ''} onClick={() => setTab('teams')}>팀 관리</button>
-        <button className={tab === 'users' ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
-        <button className={tab === 'sync' ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
+        <button className={tab === 'teams'    ? 'active' : ''} onClick={() => setTab('teams')}>팀 관리</button>
+        <button className={tab === 'users'    ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
+        <button className={tab === 'partners' ? 'active' : ''} onClick={() => setTab('partners')}>외주 관리</button>
+        {isAdmin && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>계정 관리</button>}
+        <button className={tab === 'sync'     ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
       </div>
-      {tab === 'teams' && <TeamsSettings {...props} />}
-      {tab === 'users' && <UsersSettings {...props} />}
-      {tab === 'sync'  && <SyncSettings />}
+      {tab === 'teams'    && <TeamsSettings   {...props} />}
+      {tab === 'users'    && <UsersSettings   {...props} />}
+      {tab === 'partners' && <PartnersSettings {...props} />}
+      {tab === 'accounts' && isAdmin && <UserApprovalSettings />}
+      {tab === 'sync'     && <SyncSettings />}
     </div>
   );
 }
@@ -287,25 +292,16 @@ function UsersSettings({ onNewUser, onEditUser, onDeleteUser, onSaveUser }) {
 }
 
 function SyncSettings() {
-  const [url, setUrl] = useStateS(() => localStorage.getItem('SUPABASE_URL') || '');
-  const [key, setKey] = useStateS(() => localStorage.getItem('SUPABASE_ANON_KEY') || '');
+  const [url] = useStateS(() => window.SUPABASE_URL || '');
+  const [key] = useStateS(() => window.SUPABASE_ANON_KEY || '');
   const [showKey, setShowKey] = useStateS(false);
   const [diagnosing, setDiagnosing] = useStateS(false);
   const [diagResult, setDiagResult] = useStateS(null);
 
   const connected = !!window.__SUPABASE_CONNECTED__;
 
-  const saveAndReload = () => {
-    // trim & 끝 슬래시 제거 (자주 나는 실수 자동 교정)
-    const cleanUrl = url.trim().replace(/\/+$/, '');
-    const cleanKey = key.trim();
-    localStorage.setItem('SUPABASE_URL', cleanUrl);
-    localStorage.setItem('SUPABASE_ANON_KEY', cleanKey);
-    location.reload();
-  };
-
   const clearAndReload = () => {
-    if (!confirm('저장된 Supabase URL/KEY를 지우고 로컬 데모 모드로 돌아갑니다. 계속할까요?')) return;
+    if (!confirm('브라우저에 예전에 저장된 Supabase URL/KEY만 지웁니다. 운영 앱은 배포 설정의 Supabase DB를 계속 사용합니다. 계속할까요?')) return;
     localStorage.removeItem('SUPABASE_URL');
     localStorage.removeItem('SUPABASE_ANON_KEY');
     location.reload();
@@ -323,20 +319,20 @@ function SyncSettings() {
       {/* 현재 연결 상태 */}
       <div className="card">
         <div className="card-header">
-          <div>
-            <div className="card-title">Supabase 연동 상태</div>
-            <div className="card-sub">{connected ? '클라우드 DB와 실시간 동기화 중' : '브라우저 메모리 (로컬 데모)'}</div>
-          </div>
+            <div>
+              <div className="card-title">Supabase 연동 상태</div>
+            <div className="card-sub">{connected ? '클라우드 DB와 실시간 동기화 중' : 'Supabase DB 미연결 - 저장 불가'}</div>
+            </div>
           <div style={{ flex: 1 }}></div>
           {connected ? (
             <span className="badge" style={{ background: 'var(--success) ', color: 'white' }}>
               <span className="badge-dot" style={{ background: 'white' }}></span>연결됨
             </span>
           ) : (
-            <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
-              <span className="badge-dot" style={{ background: 'var(--warn)' }}></span>미연결 / 로컬 데모
-            </span>
-          )}
+              <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
+              <span className="badge-dot" style={{ background: 'var(--warn)' }}></span>미연결 / 저장 불가
+              </span>
+            )}
         </div>
 
         <div style={{ padding: 20 }}>
@@ -346,10 +342,10 @@ function SyncSettings() {
               className="input"
               placeholder="https://xxxxxxxxxx.supabase.co"
               value={url}
-              onChange={e => setUrl(e.target.value)}
+              readOnly
               style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}
             />
-            <div className="field-hint">Supabase 대시보드 → Project Settings → API → Project URL</div>
+            <div className="field-hint">운영 모드는 배포된 설정만 사용합니다. 브라우저 저장값은 사용하지 않습니다.</div>
           </div>
 
           <div className="field">
@@ -360,7 +356,7 @@ function SyncSettings() {
                 placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 value={key}
                 type={showKey ? 'text' : 'password'}
-                onChange={e => setKey(e.target.value)}
+                readOnly
                 style={{ fontFamily: 'var(--font-mono)', fontSize: 12, paddingRight: 50 }}
               />
               <button
@@ -375,16 +371,13 @@ function SyncSettings() {
           </div>
 
           <div className="row gap-8" style={{ marginTop: 12 }}>
-            <button className="btn btn-primary btn-sm" onClick={saveAndReload} disabled={!url || !key}>
-              <Icon name="check" size={13} /> 저장하고 연결하기
-            </button>
             <button className="btn btn-sm" onClick={runDiagnosis} disabled={diagnosing}>
               <Icon name="zap" size={13} /> {diagnosing ? '진단 중…' : '연결 진단'}
             </button>
             <div style={{ flex: 1 }}></div>
             {(localStorage.getItem('SUPABASE_URL') || localStorage.getItem('SUPABASE_ANON_KEY')) && (
               <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clearAndReload}>
-                저장값 삭제
+                예전 브라우저 저장값 삭제
               </button>
             )}
           </div>
@@ -424,22 +417,51 @@ function SyncSettings() {
 }
 
 function SlackSettings() {
-  const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_BOT_TOKEN') || '');
+  const [token, setToken] = useStateS(() => localStorage.getItem('SLACK_SYNC_TOKEN') || '');
   const [wsUrl, setWsUrl] = useStateS(() => localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com');
   const [showToken, setShowToken] = useStateS(false);
-  const saved = !!localStorage.getItem('SLACK_BOT_TOKEN');
+  const [testing, setTesting] = useStateS(false);
+  const [testResult, setTestResult] = useStateS(null);
+  const saved = !!localStorage.getItem('SLACK_SYNC_TOKEN');
 
   const save = () => {
-    localStorage.setItem('SLACK_BOT_TOKEN', token.trim());
+    localStorage.setItem('SLACK_SYNC_TOKEN', token.trim());
     localStorage.setItem('SLACK_WORKSPACE_URL', wsUrl.trim().replace(/\/+$/, ''));
     alert('저장되었습니다. 영업 파이프라인 → 신규고객 동기화 버튼을 사용할 수 있습니다.');
   };
   const clear = () => {
-    if (!confirm('Slack 토큰을 삭제하시겠습니까?')) return;
-    localStorage.removeItem('SLACK_BOT_TOKEN');
+    if (!confirm('Slack 동기화 토큰을 삭제하시겠습니까?')) return;
+    localStorage.removeItem('SLACK_SYNC_TOKEN');
     localStorage.removeItem('SLACK_WORKSPACE_URL');
     setToken('');
     setWsUrl('https://bigxdata-official.slack.com');
+    setTestResult(null);
+  };
+  const testConnection = async () => {
+    const cleanToken = token.trim();
+    if (!cleanToken) {
+      setTestResult({ ok: false, message: '동기화 토큰을 먼저 입력해주세요.' });
+      return;
+    }
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await fetch('/api/slack-channels', {
+        headers: { 'X-Resource-Hub-Token': cleanToken },
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch {}
+      if (res.ok && data?.ok) {
+        setTestResult({ ok: true, message: `연결 성공 · SV 채널 ${data.channels?.length || 0}개 확인` });
+      } else {
+        setTestResult({ ok: false, message: formatSlackSettingsError(data?.error, res.status, data?.detail || text) });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, message: '네트워크 오류: ' + e.message });
+    } finally {
+      setTesting(false);
+    }
   };
 
   return (
@@ -459,7 +481,7 @@ function SlackSettings() {
             </svg>
             Slack 연동
           </div>
-          <div className="card-sub">봇 토큰으로 SV 채널을 자동 동기화합니다</div>
+          <div className="card-sub">서버 환경변수의 Slack Bot Token을 보호한 상태로 SV 채널을 동기화합니다</div>
         </div>
         <div style={{ flex: 1 }}></div>
         {saved ? (
@@ -474,12 +496,12 @@ function SlackSettings() {
       </div>
       <div style={{ padding: 20 }}>
         <div className="field">
-          <div className="field-label">Bot Token</div>
+          <div className="field-label">동기화 토큰</div>
           <div style={{ display: 'flex', gap: 6 }}>
             <input
               className="input"
               type={showToken ? 'text' : 'password'}
-              placeholder="xoxb-..."
+              placeholder="관리자에게 받은 동기화 토큰"
               value={token}
               onChange={e => setToken(e.target.value)}
               style={{ fontFamily: 'var(--font-mono)', flex: 1 }}
@@ -488,7 +510,7 @@ function SlackSettings() {
               {showToken ? '숨기기' : '보기'}
             </button>
           </div>
-          <div className="field-hint">Slack 앱 → OAuth & Permissions → Bot Token (xoxb-) · 필요 권한: channels:read, groups:read</div>
+          <div className="field-hint">Vercel 환경변수 SLACK_SYNC_TOKEN과 같은 값. Slack Bot Token은 브라우저에 입력하지 않습니다.</div>
         </div>
         <div className="field">
           <div className="field-label">워크스페이스 URL</div>
@@ -504,15 +526,42 @@ function SlackSettings() {
           <button className="btn btn-primary btn-sm" onClick={save} disabled={!token.trim()}>
             <Icon name="check" size={13} /> 저장
           </button>
+          <button className="btn btn-sm" onClick={testConnection} disabled={testing || !token.trim()}>
+            <Icon name="zap" size={13} /> {testing ? '테스트 중...' : '연결 테스트'}
+          </button>
           {saved && (
             <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear}>
               삭제
             </button>
           )}
         </div>
+        {testResult && (
+          <div style={{
+            marginTop: 10,
+            padding: '8px 10px',
+            borderRadius: 6,
+            background: testResult.ok ? 'var(--success-weak)' : 'var(--danger-weak)',
+            color: testResult.ok ? 'var(--success)' : 'var(--danger)',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}>
+            {testResult.message}
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function formatSlackSettingsError(error, status, detail) {
+  const messages = {
+    missing_slack_bot_token: '서버에 SLACK_BOT_TOKEN 환경변수가 없습니다.',
+    missing_slack_sync_token: '서버에 SLACK_SYNC_TOKEN 환경변수가 없습니다.',
+    invalid_sync_token: '동기화 토큰이 일치하지 않습니다. Vercel의 SLACK_SYNC_TOKEN과 앱에 입력한 값이 같아야 합니다.',
+    slack_fetch_failed: 'Slack API 호출 실패입니다. SLACK_BOT_TOKEN 값 또는 Slack 앱 권한을 확인해주세요.',
+  };
+  const base = messages[error] || `HTTP ${status}`;
+  return detail ? `${base} (${detail})` : base;
 }
 
 // ===== 진단 로직 =====
@@ -527,13 +576,13 @@ async function diagnoseSupabase() {
   }
   add('SDK 로드', 'ok', `@supabase/supabase-js 버전 ${window.supabase?.VERSION || '2.x'} 로드됨`);
 
-  // 2. URL 저장 여부
-  const url = localStorage.getItem('SUPABASE_URL');
+  // 2. 배포 설정 URL 여부
+  const url = window.SUPABASE_URL;
   if (!url) {
-    add('URL 저장', 'fail', 'localStorage에 SUPABASE_URL 없음', '위 URL 필드에 https://xxx.supabase.co 입력 후 "저장하고 연결하기" 누르세요.');
-    return { ok: false, checks, summary: 'URL 미저장' };
+    add('URL 설정', 'fail', '배포 설정에 SUPABASE_URL 없음', 'index.html의 window.SUPABASE_URL 값을 확인하세요.');
+    return { ok: false, checks, summary: 'URL 미설정' };
   }
-  add('URL 저장', 'ok', url);
+  add('URL 설정', 'ok', url);
 
   // 3. URL 포맷 검증
   if (!url.startsWith('https://')) {
@@ -546,13 +595,13 @@ async function diagnoseSupabase() {
     add('URL 포맷', 'ok', '형식 정상');
   }
 
-  // 4. KEY 저장 + role 검증
-  const key = localStorage.getItem('SUPABASE_ANON_KEY');
+  // 4. 배포 설정 KEY + role 검증
+  const key = window.SUPABASE_ANON_KEY;
   if (!key) {
-    add('KEY 저장', 'fail', 'localStorage에 SUPABASE_ANON_KEY 없음', 'KEY 필드 채우고 저장.');
-    return { ok: false, checks, summary: 'KEY 미저장' };
+    add('KEY 설정', 'fail', '배포 설정에 SUPABASE_ANON_KEY 없음', 'index.html의 window.SUPABASE_ANON_KEY 값을 확인하세요.');
+    return { ok: false, checks, summary: 'KEY 미설정' };
   }
-  add('KEY 저장', 'ok', `${key.substring(0, 20)}... (길이 ${key.length})`);
+  add('KEY 설정', 'ok', `${key.substring(0, 20)}... (길이 ${key.length})`);
 
   // JWT payload 디코드해서 role 확인
   try {
@@ -728,6 +777,408 @@ function exportCSV() {
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href = url; a.download = `utilization-${Date.now()}.csv`; a.click();
+}
+
+// ===== 외주 관리 설정 탭 =====
+function PartnersSettings({ onNewPartner, onEditPartner, onDeletePartner, onSavePartner }) {
+  const {
+    OUTSOURCING_PARTNERS,
+    OUTSOURCING_PARTNER_TYPES,
+    OUTSOURCING_PARTNER_STATUSES,
+    OUTSOURCING_GRADES,
+    LEVEL_COLORS,
+  } = window.APP_DATA;
+
+  const [typeFilter,   setTypeFilter]   = useStateS('all');
+  const [statusFilter, setStatusFilter] = useStateS('active');
+  const [search,       setSearch]       = useStateS('');
+  const [editingId,    setEditingId]    = useStateS(null);
+  const [editDraft,    setEditDraft]    = useStateS(null);
+  const [menuOpenId,   setMenuOpenId]   = useStateS(null);
+
+  const partners = OUTSOURCING_PARTNERS || [];
+
+  // 만료 임박 (30일 이내)
+  const expiring = partners.filter(p => {
+    if (!p.endDate || p.status === 'ended') return false;
+    const diff = (new Date(p.endDate) - new Date()) / 86400000;
+    return diff >= 0 && diff <= 30;
+  });
+
+  const filtered = partners.filter(p => {
+    if (typeFilter !== 'all' && p.type !== typeFilter) return false;
+    if (statusFilter === 'active' && p.status === 'ended') return false;
+    if (search && !p.name.includes(search) && !(p.company || '').includes(search)) return false;
+    return true;
+  });
+
+  const startInline = (p) => { setEditingId(p.id); setEditDraft({ ...p }); setMenuOpenId(null); };
+  const cancelInline = () => { setEditingId(null); setEditDraft(null); };
+  const saveInline = async () => { if (editDraft) { await onSavePartner(editDraft, true); cancelInline(); } };
+
+  const inputStyle = { padding: '3px 6px', fontSize: 12, border: '1px solid var(--accent)', borderRadius: 4, background: 'white', fontFamily: 'inherit', width: '100%' };
+
+  return (
+    <div className="col gap-16">
+      {/* 만료 임박 경고 */}
+      {expiring.length > 0 && (
+        <div style={{ padding: '10px 16px', background: 'var(--warn-weak)', border: '1px solid var(--warn)', borderRadius: 8, display: 'flex', gap: 10 }}>
+          <span style={{ fontSize: 16 }}>⚠</span>
+          <div>
+            <div className="small bold" style={{ color: 'var(--warn)' }}>계약 만료 임박 ({expiring.length}명)</div>
+            <div className="tiny" style={{ color: 'var(--warn)', marginTop: 2 }}>
+              {expiring.map(p => `${p.name} (${p.endDate})`).join(' · ')}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">외주 인력 관리 ({partners.length}명)</div>
+            <div className="card-sub">
+              파트너 {partners.filter(p => p.type === 'partner').length}명 ·
+              프리랜서 {partners.filter(p => p.type === 'freelancer').length}명 ·
+              활성 {partners.filter(p => p.status !== 'ended').length}명
+            </div>
+          </div>
+          <div style={{ flex: 1 }}></div>
+          <input className="input" placeholder="이름/회사 검색" style={{ width: 150 }}
+            value={search} onChange={e => setSearch(e.target.value)} />
+          <select className="select" style={{ width: 'auto' }} value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
+            <option value="all">전체 구분</option>
+            {Object.entries(OUTSOURCING_PARTNER_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+          <select className="select" style={{ width: 'auto' }} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="active">활성만</option>
+            <option value="all">전체</option>
+          </select>
+          <button className="btn btn-primary btn-sm" onClick={onNewPartner}><Icon name="plus" size={13} /> 추가</button>
+        </div>
+
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th style={{ width: 60 }}>구분</th>
+              <th style={{ width: 120 }}>회사명</th>
+              <th>이름</th>
+              <th style={{ width: 60 }}>등급</th>
+              <th style={{ width: 80 }}>계약유형</th>
+              <th style={{ width: 80 }}>계약종료</th>
+              <th style={{ width: 60 }}>상태</th>
+              <th>비고</th>
+              <th style={{ width: 40 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => {
+              const typeLabel   = OUTSOURCING_PARTNER_TYPES[p.type] || p.type;
+              const typeColor   = p.type === 'partner' ? '#6366F1' : '#F59E0B';
+              const statusInfo  = OUTSOURCING_PARTNER_STATUSES[p.status];
+              const isEditing   = editingId === p.id;
+              const expSoon     = p.endDate && (new Date(p.endDate) - new Date()) / 86400000 <= 30 && (new Date(p.endDate) - new Date()) / 86400000 >= 0;
+
+              if (isEditing) {
+                return (
+                  <tr key={p.id} style={{ background: 'var(--accent-weak)' }}>
+                    <td>
+                      <select style={{ ...inputStyle, width: 70 }} value={editDraft.type} onChange={e => setEditDraft({ ...editDraft, type: e.target.value })}>
+                        {Object.entries(OUTSOURCING_PARTNER_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={inputStyle} value={editDraft.company || ''} onChange={e => setEditDraft({ ...editDraft, company: e.target.value })} placeholder="회사명" /></td>
+                    <td><input style={{ ...inputStyle }} value={editDraft.name} onChange={e => setEditDraft({ ...editDraft, name: e.target.value })} autoFocus /></td>
+                    <td>
+                      <select style={{ ...inputStyle, width: 65 }} value={editDraft.grade || ''} onChange={e => setEditDraft({ ...editDraft, grade: e.target.value })}>
+                        {OUTSOURCING_GRADES.map(g => <option key={g}>{g}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={{ ...inputStyle, width: 80 }} value={editDraft.contractType || ''} onChange={e => setEditDraft({ ...editDraft, contractType: e.target.value })} /></td>
+                    <td><input style={{ ...inputStyle, width: 110 }} type="date" value={editDraft.endDate || ''} onChange={e => setEditDraft({ ...editDraft, endDate: e.target.value })} /></td>
+                    <td>
+                      <select style={{ ...inputStyle, width: 65 }} value={editDraft.status} onChange={e => setEditDraft({ ...editDraft, status: e.target.value })}>
+                        {Object.entries(OUTSOURCING_PARTNER_STATUSES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </td>
+                    <td><input style={inputStyle} value={editDraft.note || ''} onChange={e => setEditDraft({ ...editDraft, note: e.target.value })} placeholder="비고" /></td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button className="btn btn-primary btn-sm" style={{ padding: '2px 6px' }} onClick={saveInline}><Icon name="check" size={12} /></button>
+                      <button className="btn btn-sm btn-ghost" style={{ padding: '2px 6px', marginLeft: 2 }} onClick={cancelInline}><Icon name="x" size={12} /></button>
+                    </td>
+                  </tr>
+                );
+              }
+
+              return (
+                <tr key={p.id} style={{ opacity: p.status === 'ended' ? 0.5 : 1 }}>
+                  <td>
+                    <span className="badge" style={{ background: typeColor + '22', color: typeColor, fontSize: 10 }}>{typeLabel}</span>
+                  </td>
+                  <td className="small" style={{ color: 'var(--text-muted)' }}>{p.company || '—'}</td>
+                  <td>
+                    <span className="bold small">{p.name}</span>
+                    {p.email && <span className="tiny subtle" style={{ marginLeft: 6 }}>{p.email}</span>}
+                  </td>
+                  <td>
+                    <span className="small" style={{ color: LEVEL_COLORS?.[p.grade] || 'var(--text-subtle)', fontWeight: 600 }}>
+                      {p.grade || '—'}
+                    </span>
+                  </td>
+                  <td className="tiny subtle">{p.contractType || '—'}</td>
+                  <td>
+                    {p.endDate ? (
+                      <span className="tiny num" style={{ color: expSoon ? 'var(--warn)' : 'var(--text-muted)', fontWeight: expSoon ? 700 : 400 }}>
+                        {expSoon && '⚠ '}{p.endDate}
+                      </span>
+                    ) : <span className="tiny subtle">—</span>}
+                  </td>
+                  <td>
+                    <span className="badge" style={{ background: statusInfo.color + '22', color: statusInfo.color }}>
+                      {statusInfo.label}
+                    </span>
+                  </td>
+                  <td className="tiny subtle ellipsis" style={{ maxWidth: 180 }}>{p.note || ''}</td>
+                  <td style={{ textAlign: 'right', position: 'relative' }}>
+                    <button className="btn btn-sm btn-ghost" style={{ padding: '2px 6px' }}
+                      onClick={() => setMenuOpenId(menuOpenId === p.id ? null : p.id)}>⋮</button>
+                    {menuOpenId === p.id && (
+                      <div style={{ position: 'absolute', top: '100%', right: 8, zIndex: 50, background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: 'var(--shadow-lg)', minWidth: 180, padding: 4 }}>
+                        <SMenuItem icon="edit" label="빠른 수정 (인라인)" onClick={() => startInline(p)} />
+                        <SMenuItem icon="edit" label="상세 수정" onClick={() => { onEditPartner(p.id); setMenuOpenId(null); }} />
+                        <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }}></div>
+                        <SMenuItem icon="trash" label="삭제" danger
+                          onClick={() => {
+                            if (confirm(`"${p.name}" 님을 삭제하시겠습니까?\n(월별 기록도 함께 삭제됩니다)`)) {
+                              onDeletePartner(p.id);
+                              setMenuOpenId(null);
+                            } else {
+                              setMenuOpenId(null);
+                            }
+                          }}
+                        />
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {filtered.length === 0 && (
+          <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>
+            {partners.length === 0 ? '등록된 외주 인력이 없습니다. 추가 버튼으로 파트너/프리랜서를 등록하세요.' : '조건에 맞는 인원이 없습니다'}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===== 계정 관리 탭 (관리자 전용) =====
+function UserApprovalSettings() {
+  const [profiles, setProfiles]     = useStateS([]);
+  const [loading, setLoading]       = useStateS(true);
+  const [filter, setFilter]         = useStateS('pending'); // 'pending' | 'all'
+  const [saving, setSaving]         = useStateS({});
+  const [error, setError]           = useStateS('');
+  const currentUserId = window.__RESOURCE_HUB_AUTH__?.user?.id;
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      if (!client) throw new Error('Supabase 클라이언트 없음');
+      const { data, error: err } = await client
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (err) throw err;
+      setProfiles(data || []);
+    } catch (e) {
+      setError('계정 목록 로드 실패: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffectS(() => { load(); }, []);
+
+  const sendResetEmail = async (email, name) => {
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error: err } = await client.auth.resetPasswordForEmail(email, { redirectTo });
+      if (err) throw err;
+      alert(`✅ ${name || email}님께 비밀번호 재설정 이메일을 발송했습니다.`);
+    } catch (e) {
+      alert('발송 실패: ' + e.message);
+    }
+  };
+
+  const changeStatus = async (profileId, newStatus) => {
+    setSaving(s => ({ ...s, [profileId]: true }));
+    setError('');
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      const now = new Date().toISOString();
+      const update = {
+        status: newStatus,
+        ...(newStatus === 'approved' || newStatus === 'admin'
+          ? { approved_at: now, approved_by: window.__RESOURCE_HUB_AUTH__?.user?.email || '' }
+          : {}),
+      };
+      const { error: err } = await client.from('profiles').update(update).eq('id', profileId);
+      if (err) throw err;
+      setProfiles(prev => prev.map(p => p.id === profileId ? { ...p, ...update } : p));
+    } catch (e) {
+      setError('상태 변경 실패: ' + e.message);
+    } finally {
+      setSaving(s => { const n = { ...s }; delete n[profileId]; return n; });
+    }
+  };
+
+  const STATUS_META = {
+    pending:  { label: '대기',       color: '#F59E0B', bg: '#FEF3C7' },
+    approved: { label: '승인됨',     color: '#10B981', bg: '#D1FAE5' },
+    admin:    { label: '관리자',     color: '#2563EB', bg: '#DBEAFE' },
+    rejected: { label: '거절됨',     color: '#EF4444', bg: '#FEE2E2' },
+  };
+
+  const filtered = filter === 'pending'
+    ? profiles.filter(p => p.status === 'pending')
+    : profiles;
+
+  const pendingCount = profiles.filter(p => p.status === 'pending').length;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div>
+          <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            계정 관리
+            {pendingCount > 0 && (
+              <span style={{
+                background: '#FEF3C7', color: '#B45309',
+                borderRadius: 10, padding: '1px 8px', fontSize: 11, fontWeight: 700,
+              }}>{pendingCount}명 대기</span>
+            )}
+          </div>
+          <div className="card-sub">가입 승인 및 권한 관리 (관리자 전용)</div>
+        </div>
+        <div style={{ flex: 1 }}></div>
+        <div className="segmented">
+          <button className={filter === 'pending' ? 'active' : ''} onClick={() => setFilter('pending')}>
+            대기 {pendingCount > 0 ? `(${pendingCount})` : ''}
+          </button>
+          <button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>
+            전체 ({profiles.length})
+          </button>
+        </div>
+        <button className="btn btn-sm btn-ghost" onClick={load} disabled={loading}>
+          <Icon name="zap" size={13} /> 새로고침
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ padding: '10px 20px', background: '#FEF2F2', color: '#DC2626', fontSize: 13 }}>
+          {error}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>불러오는 중…</div>
+      ) : filtered.length === 0 ? (
+        <div className="muted small" style={{ padding: 28, textAlign: 'center' }}>
+          {filter === 'pending' ? '승인 대기 중인 계정이 없습니다.' : '등록된 계정이 없습니다.'}
+        </div>
+      ) : (
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>이름</th>
+              <th>이메일</th>
+              <th style={{ width: 80 }}>상태</th>
+              <th style={{ width: 130 }}>가입일</th>
+              <th style={{ width: 200 }}>권한 변경</th>
+              <th style={{ width: 80 }}>PW 초기화</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map(p => {
+              const meta    = STATUS_META[p.status] || STATUS_META.pending;
+              const isMe    = p.id === currentUserId;
+              const isBusy  = !!saving[p.id];
+              const joinedAt = p.created_at ? new Date(p.created_at).toLocaleDateString('ko-KR') : '—';
+
+              return (
+                <tr key={p.id} style={{ opacity: isBusy ? 0.6 : 1 }}>
+                  <td>
+                    <span className="bold small">{p.name || '—'}</span>
+                    {isMe && <span className="badge" style={{ marginLeft: 6, fontSize: 9, background: '#DBEAFE', color: '#1D4ED8' }}>나</span>}
+                  </td>
+                  <td className="small" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{p.email}</td>
+                  <td>
+                    <span className="badge" style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+                  </td>
+                  <td className="tiny subtle num">{joinedAt}</td>
+                  <td>
+                    <button
+                      className="btn btn-sm"
+                      style={{ background: '#EEF2FF', color: '#4338CA', border: 'none', fontSize: 11, whiteSpace: 'nowrap' }}
+                      onClick={() => sendResetEmail(p.email, p.name)}
+                    >
+                      이메일 발송
+                    </button>
+                  </td>
+                  <td>
+                    {isMe ? (
+                      <span className="tiny subtle">본인 계정은 변경 불가</span>
+                    ) : (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {p.status !== 'approved' && (
+                          <button className="btn btn-sm" style={{ background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy}>
+                            ✓ 승인
+                          </button>
+                        )}
+                        {p.status !== 'admin' && (
+                          <button className="btn btn-sm" style={{ background: '#DBEAFE', color: '#1E40AF', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'admin')} disabled={isBusy}>
+                            ★ 관리자
+                          </button>
+                        )}
+                        {(p.status === 'admin' || p.status === 'approved') && (
+                          <button className="btn btn-sm" style={{ background: '#FEF3C7', color: '#92400E', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy || p.status === 'approved'}>
+                            ↓ 일반사용자
+                          </button>
+                        )}
+                        {p.status !== 'rejected' && (
+                          <button className="btn btn-sm" style={{ background: '#FEE2E2', color: '#991B1B', border: 'none', fontSize: 11 }}
+                            onClick={() => { if (confirm(`"${p.name || p.email}" 계정을 거절하시겠습니까?`)) changeStatus(p.id, 'rejected'); }}
+                            disabled={isBusy}>
+                            ✗ 거절
+                          </button>
+                        )}
+                        {p.status === 'rejected' && (
+                          <button className="btn btn-sm" style={{ background: '#D1FAE5', color: '#065F46', border: 'none', fontSize: 11 }}
+                            onClick={() => changeStatus(p.id, 'approved')} disabled={isBusy}>
+                            ↩ 재승인
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
 }
 
 Object.assign(window, { SettingsView });

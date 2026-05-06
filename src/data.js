@@ -105,6 +105,8 @@ for (let i = 1; i <= 53; i++) {
   const m = mondayOfW(i);
   const f = new Date(m); f.setDate(f.getDate() + 4);
   const month = m.getMonth() + 1;
+  const periodYear = f.getFullYear();
+  const periodMonth = f.getMonth() + 1;
   WEEKS.push({
     id: `W${i}`,
     num: i,
@@ -116,12 +118,41 @@ for (let i = 1; i <= 53; i++) {
     month,
     quarter: Math.floor((month - 1) / 3) + 1,
     half: month <= 6 ? 'H1' : 'H2',
+    periodYear,
+    periodMonth,
+    periodQuarter: Math.floor((periodMonth - 1) / 3) + 1,
+    periodHalf: periodMonth <= 6 ? 'H1' : 'H2',
   });
 }
 
-// 기준일: 2026-04-20 월요일 = W16
-const TODAY = new Date(2026, 3, 20);
-function currentWeekIdx() { return 15; /* W16 */ }
+const UTIL_BASE_EXCLUDED_USER_IDS = new Set(['u043', 'u046']); // DX 강승일, 김서연
+function parseYMDDate(s) {
+  if (!s) return null;
+  const [y, m, d] = s.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+function isUserInUtilizationBase(user, week) {
+  if (!user || !week || user.status !== 'active') return false;
+  if (UTIL_BASE_EXCLUDED_USER_IDS.has(user.id)) return false;
+  if (user.id === 'u001' && week.friday >= new Date(2026, 3, 1)) return false;
+  const joined = parseYMDDate(user.joinedAt);
+  if (joined && week.friday < joined) return false;
+  return true;
+}
+
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+// 브라우저의 현재 날짜를 기준으로 주차를 계산합니다.
+const TODAY = startOfLocalDay(new Date());
+function currentWeekIdx(date = TODAY) {
+  const firstMonday = startOfLocalDay(WEEKS[0].monday);
+  const target = startOfLocalDay(date);
+  const diffDays = Math.floor((target - firstMonday) / 86400000);
+  return Math.max(0, Math.min(WEEKS.length - 1, Math.floor(diffDays / 7)));
+}
 
 // 주차 범위 헬퍼
 function wRange(from, to) {
@@ -431,6 +462,37 @@ addUtil('u046', [  // 김서연 (1/19 입사)
   [R(3,4), null, 0, '온보딩'],
 ]);
 
+// ===== 외주 관리 마스터 데이터 =====
+const OUTSOURCING_PARTNER_TYPES  = { partner: '파트너', freelancer: '프리랜서' };
+const OUTSOURCING_GRADES         = ['특급', '고급', '중급', '초급', '해당없음'];
+const OUTSOURCING_CONTRACT_TYPES = ['월정계약', '프로젝트', '시간제', '기타'];
+const OUTSOURCING_PARTNER_STATUSES = {
+  active:   { label: '활성',    color: '#10B981' },
+  inactive: { label: '비활성',  color: '#F59E0B' },
+  ended:    { label: '계약종료', color: '#94A3B8' },
+};
+const OUTSOURCING_PARTNERS = []; // Supabase 로드 후 교체
+const OUTSOURCING_RECORDS  = {}; // { [partnerId]: { [monthId]: { billingStatus, revenue, cost, project, note } } }
+
+// 2026년 1~12월
+const MONTHS = [];
+for (let m = 1; m <= 12; m++) {
+  const mStr = String(m).padStart(2, '0');
+  MONTHS.push({
+    id: `2026-${mStr}`,
+    year: 2026,
+    month: m,
+    quarter: Math.ceil(m / 3),
+    label: `${m}월`,
+    fullLabel: `2026년 ${m}월`,
+  });
+}
+
+function currentMonthId(date) {
+  const d = date || TODAY;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
 // ===== 영업 파이프라인 =====
 const PIPELINE_STAGES = [
   { id: '완료', color: '#64748B' },
@@ -471,6 +533,16 @@ window.APP_DATA = {
   LEVELS, LEVEL_COLORS, STATUSES, SALES_PEOPLE, KPI_TARGET,
   TODAY,
   computeUtilization,
+  isUserInUtilizationBase,
   currentWeekIdx,
   fmtMD, fmtYMD,
+  // 외주 관리
+  MONTHS,
+  currentMonthId,
+  OUTSOURCING_PARTNERS,
+  OUTSOURCING_RECORDS,
+  OUTSOURCING_PARTNER_TYPES,
+  OUTSOURCING_GRADES,
+  OUTSOURCING_CONTRACT_TYPES,
+  OUTSOURCING_PARTNER_STATUSES,
 };

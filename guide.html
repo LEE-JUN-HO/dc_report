@@ -75,7 +75,7 @@
 </head>
 <body>
 
-<a href="Resource Hub.html" class="back-link">← Resource Hub으로 돌아가기</a>
+<a href="/" class="back-link">← Resource Hub으로 돌아가기</a>
 
 <h1>Supabase 배포 가이드</h1>
 <p class="lede">실제 DB로 옮겨서 팀 전체가 함께 쓰는 방법. 준호님 기준 <b>약 15분</b>.</p>
@@ -154,13 +154,14 @@
 
 <div class="step">
   <div class="step-num">5</div>
-  <h3>앱에 연결 (30초)</h3>
-  <p><b>Resource Hub</b> 열기 → 브라우저 개발자 도구 (<kbd>F12</kbd>) → <b>Console</b> 탭 → 아래 2줄 실행:</p>
+  <h3>앱에 연결</h3>
+  <p>운영 앱은 브라우저 localStorage를 저장소로 쓰지 않습니다. <code>index.html</code>의 <code>window.SUPABASE_URL</code>, <code>window.SUPABASE_ANON_KEY</code> 값을 설정한 뒤 배포하세요.</p>
   <div class="pre-wrap">
     <button class="copy-btn" onclick="copyCode(this)">복사</button>
-    <pre><code>localStorage.setItem('SUPABASE_URL', 'https://xxxxx.supabase.co');
-localStorage.setItem('SUPABASE_ANON_KEY', 'eyJhbGc...');
-location.reload();</code></pre>
+    <pre><code>&lt;script&gt;
+  window.SUPABASE_URL = 'https://xxxxx.supabase.co';
+  window.SUPABASE_ANON_KEY = 'eyJhbGc...';
+&lt;/script&gt;</code></pre>
   </div>
   <p>xxxxx와 eyJ... 부분은 4단계에서 복사한 값으로 교체.</p>
   <div class="callout success">
@@ -185,7 +186,7 @@ location.reload();</code></pre>
   <ol>
     <li><a href="https://vercel.com" target="_blank">vercel.com</a> 가입 (GitHub 연동)</li>
     <li><b>Add New → Project → Import (혹은 Drag & Drop)</b></li>
-    <li>압축 푼 폴더를 드래그 (<code>Resource Hub.html</code>, <code>src/</code>, <code>supabase/</code>가 포함된 폴더)</li>
+    <li>압축 푼 폴더를 드래그 (<code>index.html</code>, <code>src/</code>, <code>supabase/</code>가 포함된 폴더)</li>
     <li>Framework: <b>Other</b>, 나머지 기본값</li>
     <li><b>Deploy</b></li>
   </ol>
@@ -197,7 +198,7 @@ location.reload();</code></pre>
 <div class="step">
   <div class="step-num">C</div>
   <h3>팀원이 접속했을 때 자동으로 Supabase 연결되게 하기</h3>
-  <p>지금은 각자 브라우저에서 localStorage에 키를 넣어야 함. 배포 시엔 <code>Resource Hub.html</code> 맨 위 <code>&lt;head&gt;</code> 안에 아래 한 줄 추가하면 자동 연결됩니다:</p>
+  <p><code>index.html</code> 맨 위 <code>&lt;head&gt;</code> 안에 아래 설정을 넣고 배포하면 자동 연결됩니다:</p>
   <div class="pre-wrap">
     <button class="copy-btn" onclick="copyCode(this)">복사</button>
     <pre><code>&lt;script&gt;
@@ -210,6 +211,22 @@ location.reload();</code></pre>
     사내 공유만 하거나 <b>간단한 해시 토큰을 URL에 붙이는 방식</b>을 권장합니다.
     (예: <code>https://resource-hub.vercel.app?k=pw-ab12cd34</code> — 맞지 않으면 화면 잠금)
     필요하시면 다음 버전에서 추가 가능합니다.
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-num">D</div>
+  <h3>Slack 동기화 보안 설정</h3>
+  <p>Slack Bot Token은 브라우저에 넣지 않고 Vercel 서버 환경변수에만 저장합니다. Vercel 프로젝트 → <b>Settings → Environment Variables</b>에서 아래 값을 추가하세요.</p>
+  <ul>
+    <li><code>SLACK_BOT_TOKEN</code>: Slack 앱의 Bot User OAuth Token (<code>xoxb-...</code>)</li>
+    <li><code>SLACK_SYNC_TOKEN</code>: Resource Hub 관리자만 아는 임의의 긴 문자열</li>
+  </ul>
+  <p>앱에서는 <b>설정 → 데이터 동기화 → Slack 연동</b>에 <code>SLACK_SYNC_TOKEN</code>만 입력합니다.</p>
+  <p><b>401 오류</b>가 뜨면 Slack Bot Token 문제가 아니라, 앱에 입력한 동기화 토큰과 Vercel의 <code>SLACK_SYNC_TOKEN</code> 값이 서로 다른 상태입니다. 두 값을 같은 문자열로 맞춘 뒤 다시 배포하세요.</p>
+  <div class="callout danger">
+    <b>주의:</b> <code>SLACK_BOT_TOKEN</code>은 절대 브라우저, localStorage, 문서, 채팅에 붙여넣지 마세요.
+    앱은 동기화 토큰이 맞을 때만 서버에서 SV 채널 목록을 가져옵니다.
   </div>
 </div>
 
@@ -231,7 +248,7 @@ location.reload();</code></pre>
 <h3>"Supabase 연결 실패" 빨간 배지가 뜨면</h3>
 <ul>
   <li>콘솔 에러 메시지 확인. URL 오타 / KEY 오타가 대부분</li>
-  <li><code>localStorage.clear()</code> 후 다시 입력</li>
+  <li><code>index.html</code>의 <code>window.SUPABASE_URL</code>, <code>window.SUPABASE_ANON_KEY</code> 확인</li>
   <li>Supabase 대시보드 → Table Editor에서 테이블이 진짜 있는지 확인</li>
 </ul>
 

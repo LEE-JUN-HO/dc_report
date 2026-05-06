@@ -17,10 +17,18 @@ function SlackIcon({ size = 14 }) {
 }
 
 async function fetchSlackSVChannels() {
-  const res = await fetch('/api/slack-channels');
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error);
+  const syncToken = localStorage.getItem('SLACK_SYNC_TOKEN') || '';
+  if (!syncToken.trim()) {
+    throw new Error('설정 > 데이터 동기화에서 Slack 동기화 토큰을 먼저 입력해주세요.');
+  }
+
+  const res = await fetch('/api/slack-channels', {
+    headers: { 'X-Resource-Hub-Token': syncToken.trim() },
+  });
+  const data = await readSlackResponse(res);
+  if (!data.ok) {
+    throw new Error(formatSlackError(data.error, res.status, data.detail));
+  }
 
   const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
   return (data.channels || []).map(ch => {
@@ -31,16 +39,232 @@ async function fetchSlackSVChannels() {
   });
 }
 
-function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange }) {
+async function readSlackResponse(res) {
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch {}
+  if (data) return data;
+  return { ok: false, error: 'http_error', detail: text || `HTTP ${res.status}` };
+}
+
+function formatSlackError(error, status, detail) {
+  const messages = {
+    missing_slack_bot_token: '서버에 SLACK_BOT_TOKEN 환경변수가 없습니다. Vercel 환경변수를 확인해주세요.',
+    missing_slack_sync_token: '서버에 SLACK_SYNC_TOKEN 환경변수가 없습니다. Vercel 환경변수를 확인해주세요.',
+    invalid_sync_token: 'Slack 동기화 토큰이 올바르지 않습니다. 앱 설정의 토큰과 Vercel SLACK_SYNC_TOKEN이 같은지 확인해주세요.',
+    slack_fetch_failed: 'Slack API 호출이 실패했습니다. SLACK_BOT_TOKEN 값 또는 Slack 앱 권한을 확인해주세요.',
+    http_error: `Slack 동기화 API 호출 실패: HTTP ${status}`,
+  };
+  return detail ? `${messages[error] || error || `HTTP ${status}`} (${detail})` : (messages[error] || error || `HTTP ${status}`);
+}
+
+function normalizeWinProbability(value) {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, n));
+}
+
+function formatWinProbability(value) {
+  const n = normalizeWinProbability(value);
+  return n == null ? '—' : `${n.toFixed(n % 1 === 0 ? 0 : 1)}%`;
+}
+
+function priorityLabel(priority) {
+  const n = Number(priority);
+  if (n === 1) return '최우선';
+  if (n === 55) return '집중';
+  if (n === 99) return '관망';
+  return String(priority ?? '—');
+}
+
+function pipelineSearchText(p) {
+  return [
+    p.priority, priorityLabel(p.priority), p.client, p.kind, p.status, p.sales, p.preSales,
+    p.start, p.end, p.mm, p.winProbability, p.members, p.note,
+  ].filter(v => v != null).join(' ').toLowerCase();
+}
+
+function getPipelineValue(p, key) {
+  if (key === 'winProbability') return normalizeWinProbability(p.winProbability);
+  if (key === 'priorityLabel') return priorityLabel(p.priority);
+  return p[key];
+}
+
+function matchesPipelineColumn(p, key, value) {
+  const raw = getPipelineValue(p, key);
+  if (key === 'priority') {
+    return String(raw ?? '').includes(value) || priorityLabel(raw).toLowerCase().includes(value);
+  }
+  if (['priority', 'mm', 'winProbability'].includes(key)) {
+    if (value.startsWith('>=') || value.startsWith('<=')) {
+      const n = Number(value.slice(2));
+      if (!Number.isFinite(n)) return true;
+      return value.startsWith('>=') ? Number(raw || 0) >= n : Number(raw || 0) <= n;
+    }
+    if (value.startsWith('>') || value.startsWith('<')) {
+      const n = Number(value.slice(1));
+      if (!Number.isFinite(n)) return true;
+      return value.startsWith('>') ? Number(raw || 0) > n : Number(raw || 0) < n;
+    }
+  }
+  return String(raw ?? '').toLowerCase().includes(value);
+}
+
+function defaultSortDir(key) {
+  return ['priority', 'mm', 'winProbability'].includes(key) ? 'desc' : 'asc';
+}
+
+function comparePipelineRows(a, b, key, dir) {
+  const av = getPipelineValue(a, key);
+  const bv = getPipelineValue(b, key);
+  const emptyA = av == null || av === '';
+  const emptyB = bv == null || bv === '';
+  if (emptyA && emptyB) return 0;
+  if (emptyA) return 1;
+  if (emptyB) return -1;
+
+  let result;
+  if (['priority', 'mm', 'winProbability'].includes(key)) {
+    result = Number(av) - Number(bv);
+  } else {
+    result = String(av).localeCompare(String(bv), 'ko');
+  }
+  return dir === 'asc' ? result : -result;
+}
+
+function SortTh({ label, sortKey, sortConfig, onSort, align, width }) {
+  const active = sortConfig.key === sortKey;
+  return (
+    <th style={{ textAlign: align || 'left', width }}>
+      <button
+        onClick={() => onSort(sortKey)}
+        style={{
+          border: 'none',
+          background: 'transparent',
+          padding: 0,
+          cursor: 'pointer',
+          color: active ? 'var(--accent-strong)' : 'inherit',
+          font: 'inherit',
+          fontWeight: 700,
+        }}
+        title={`${label} 기준 정렬`}
+      >
+        {label} {active ? (sortConfig.dir === 'asc' ? '▲' : '▼') : ''}
+      </button>
+    </th>
+  );
+}
+
+function ColumnFilter({ value, onChange, placeholder, type = 'text' }) {
+  return (
+    <input
+      className="input"
+      type={type}
+      value={value || ''}
+      onChange={e => onChange(e.target.value)}
+      placeholder={placeholder}
+      style={{ height: 26, minWidth: 58, padding: '3px 6px', fontSize: 11 }}
+    />
+  );
+}
+
+function ColumnSelect({ value, onChange, options }) {
+  return (
+    <select
+      className="select"
+      value={value || 'all'}
+      onChange={e => onChange(e.target.value)}
+      style={{ height: 26, minWidth: 72, padding: '2px 5px', fontSize: 11 }}
+    >
+      <option value="all">전체</option>
+      {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+    </select>
+  );
+}
+
+function BulkValueControl({ config, value, onChange }) {
+  if (!config) return null;
+  const baseStyle = { width: 'auto', minWidth: config.minWidth || 120, padding: '4px 8px' };
+  if (config.type === 'select') {
+    return (
+      <select className="select btn-sm" style={baseStyle} value={value} onChange={e => onChange(e.target.value)}>
+        <option value="">값 선택…</option>
+        {config.options.map(opt => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    );
+  }
+  if (config.type === 'number') {
+    return (
+      <input
+        className="input btn-sm"
+        type="number"
+        min={config.min}
+        max={config.max}
+        step={config.step || 1}
+        placeholder={config.placeholder}
+        style={baseStyle}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    );
+  }
+  if (config.type === 'date') {
+    return (
+      <input
+        className="input btn-sm"
+        type="date"
+        style={baseStyle}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    );
+  }
+  if (config.options?.length) {
+    const listId = `bulk-${config.key}-options`;
+    return (
+      <>
+        <input
+          className="input btn-sm"
+          list={listId}
+          placeholder={config.placeholder}
+          style={baseStyle}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+        />
+        <datalist id={listId}>
+          {config.options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+        </datalist>
+      </>
+    );
+  }
+  return (
+    <input
+      className="input btn-sm"
+      placeholder={config.placeholder}
+      style={baseStyle}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+    />
+  );
+}
+
+function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange, dataVersion }) {
   const { PIPELINE, PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE } = window.APP_DATA;
   const [statusFilter, setStatusFilter] = useStatePipe('all');
   const [kindFilter, setKindFilter] = useStatePipe('all');
   const [salesFilter, setSalesFilter] = useStatePipe('all');
   const [search, setSearch] = useStatePipe('');
-  const [sortKey, setSortKey] = useStatePipe('start');
+  const [sortConfig, setSortConfig] = useStatePipe({ key: 'start', dir: 'asc' });
+  const [columnFilters, setColumnFilters] = useStatePipe({});
+  const [includeWon, setIncludeWon] = useStatePipe(false);
   const [editingId, setEditingId] = useStatePipe(null); // 인라인 편집 중인 row id
   const [editDraft, setEditDraft] = useStatePipe(null);
   const [selected, setSelected] = useStatePipe(new Set()); // 다중선택
+  const [bulkField, setBulkField] = useStatePipe('');
+  const [bulkValue, setBulkValue] = useStatePipe('');
   const [menuOpenId, setMenuOpenId] = useStatePipe(null);
   const [syncOpen, setSyncOpen] = useStatePipe(false);
   const [syncing, setSyncing] = useStatePipe(false);
@@ -48,15 +272,19 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
 
   const filtered = useMemoPipe(() => {
     let list = PIPELINE.slice();
+    if (!includeWon) list = list.filter(p => normalizeWinProbability(p.winProbability) !== 100);
     if (statusFilter !== 'all') list = list.filter(p => p.status === statusFilter);
     if (kindFilter !== 'all')   list = list.filter(p => p.kind === kindFilter);
     if (salesFilter !== 'all')  list = list.filter(p => p.sales === salesFilter);
-    if (search)                 list = list.filter(p => p.client.includes(search) || (p.note||'').includes(search));
-    if (sortKey === 'start')    list.sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-    else if (sortKey === 'mm')  list.sort((a, b) => (b.mm||0) - (a.mm||0));
-    else if (sortKey === 'priority') list.sort((a, b) => a.priority - b.priority);
+    if (search)                 list = list.filter(p => pipelineSearchText(p).includes(search.toLowerCase()));
+    Object.entries(columnFilters).forEach(([key, raw]) => {
+      const value = String(raw || '').trim().toLowerCase();
+      if (!value || value === 'all') return;
+      list = list.filter(p => matchesPipelineColumn(p, key, value));
+    });
+    list.sort((a, b) => comparePipelineRows(a, b, sortConfig.key, sortConfig.dir));
     return list;
-  }, [statusFilter, kindFilter, salesFilter, search, sortKey]);
+  }, [statusFilter, kindFilter, salesFilter, search, sortConfig, columnFilters, includeWon, dataVersion]);
 
   const stats = useMemoPipe(() => {
     const byStatus = {};
@@ -68,7 +296,33 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
       if (byKind[p.kind] != null) byKind[p.kind]++;
     });
     return { byStatus, byKind };
-  }, [PIPELINE]);
+  }, [PIPELINE, dataVersion]);
+
+  const bulkFieldConfigs = useMemoPipe(() => ([
+    {
+      key: 'priority',
+      label: '우선순위',
+      type: 'select',
+      minWidth: 110,
+      options: [
+        { value: '1', label: '최우선' },
+        { value: '55', label: '집중' },
+        { value: '99', label: '관망' },
+      ],
+    },
+    { key: 'client', label: '고객', placeholder: '고객사명', minWidth: 150 },
+    { key: 'kind', label: '구분', type: 'select', minWidth: 96, options: PROJECT_KINDS.map(k => ({ value: k, label: k })) },
+    { key: 'status', label: '상태', type: 'select', minWidth: 96, options: PIPELINE_STAGES.map(s => ({ value: s.id, label: s.id })) },
+    { key: 'winProbability', label: '수주확률', type: 'number', min: 0, max: 100, step: 1, placeholder: '0~100', minWidth: 96 },
+    { key: 'sales', label: 'Sales', placeholder: '담당자명', minWidth: 120, options: SALES_PEOPLE.map(s => ({ value: s, label: s })) },
+    { key: 'start', label: '시작일', type: 'date', minWidth: 132 },
+    { key: 'end', label: '종료일', type: 'date', minWidth: 132 },
+    { key: 'mm', label: 'MM', type: 'number', min: 0, step: 0.1, placeholder: 'MM', minWidth: 88 },
+    { key: 'members', label: '투입 인원', placeholder: '투입 인원', minWidth: 160 },
+    { key: 'note', label: '진행상세', placeholder: '진행상세', minWidth: 180 },
+  ]), [PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE, dataVersion]);
+  const selectedBulkConfig = bulkFieldConfigs.find(f => f.key === bulkField);
+  const canApplyBulk = !!selectedBulkConfig && String(bulkValue).trim() !== '';
 
   // === 편집 action ===
   const startEdit = (p) => {
@@ -88,6 +342,11 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     onDataChange && onDataChange();
   };
   const updateDraft = (k, v) => setEditDraft({ ...editDraft, [k]: v });
+  const setColumnFilter = (key, value) => setColumnFilters(prev => ({ ...prev, [key]: value }));
+  const clearColumnFilters = () => setColumnFilters({});
+  const sortBy = (key) => setSortConfig(prev => (
+    prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: defaultSortDir(key) }
+  ));
 
   const deleteOne = async (id) => {
     if (!confirm('이 건을 삭제하시겠습니까?')) return;
@@ -115,12 +374,35 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
     onDataChange && onDataChange();
   };
 
-  const changeStatusSelected = async (newStatus) => {
+  const normalizeBulkValue = (config, rawValue) => {
+    const raw = String(rawValue).trim();
+    if (!raw) return { ok: false, message: '변경할 값을 입력해주세요.' };
+    if (config.key === 'priority') return { ok: true, value: Number(raw) };
+    if (config.key === 'winProbability') {
+      const n = normalizeWinProbability(raw);
+      if (n == null) return { ok: false, message: '수주확률은 0~100 사이 숫자로 입력해주세요.' };
+      return { ok: true, value: n };
+    }
+    if (config.key === 'mm') {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return { ok: false, message: 'MM은 숫자로 입력해주세요.' };
+      return { ok: true, value: n };
+    }
+    return { ok: true, value: raw };
+  };
+
+  const applyBulkSelected = async () => {
     if (selected.size === 0) return;
+    if (!selectedBulkConfig) return;
+    const normalized = normalizeBulkValue(selectedBulkConfig, bulkValue);
+    if (!normalized.ok) {
+      alert(normalized.message);
+      return;
+    }
     for (const id of selected) {
       const idx = PIPELINE.findIndex(p => p.id === id);
       if (idx >= 0) {
-        PIPELINE[idx].status = newStatus;
+        PIPELINE[idx] = { ...PIPELINE[idx], [selectedBulkConfig.key]: normalized.value };
         if (window.APP_DATA.savePipeline) {
           try { await window.APP_DATA.savePipeline(PIPELINE[idx]); } catch (e) { console.error(e); }
         }
@@ -140,6 +422,11 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
   const toggleSelectAll = () => {
     if (selected.size === filtered.length) setSelected(new Set());
     else setSelected(new Set(filtered.map(p => p.id)));
+  };
+
+  const changeBulkField = (fieldKey) => {
+    setBulkField(fieldKey);
+    setBulkValue('');
   };
 
   const doSync = async () => {
@@ -172,6 +459,7 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
         start: null,
         end: null,
         mm: null,
+        winProbability: null,
         members: '',
         note: '[Slack] ' + ch.svName,
         slackChannelId: ch.id,
@@ -221,10 +509,14 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
               {selected.size}건 선택됨
             </span>
             <div style={{ width: 1, height: 20, background: 'var(--border)' }}></div>
-            <select className="select btn-sm" style={{ width: 'auto', padding: '4px 8px' }} defaultValue="" onChange={e => { if (e.target.value) { changeStatusSelected(e.target.value); e.target.value=''; } }}>
-              <option value="">상태 일괄 변경…</option>
-              {PIPELINE_STAGES.map(s => <option key={s.id} value={s.id}>→ {s.id}</option>)}
+            <select className="select btn-sm" style={{ width: 'auto', minWidth: 138, padding: '4px 8px' }} value={bulkField} onChange={e => changeBulkField(e.target.value)}>
+              <option value="">변경 컬럼 선택…</option>
+              {bulkFieldConfigs.map(field => <option key={field.key} value={field.key}>{field.label}</option>)}
             </select>
+            <BulkValueControl config={selectedBulkConfig} value={bulkValue} onChange={setBulkValue} />
+            <button className="btn btn-primary btn-sm" onClick={applyBulkSelected} disabled={!canApplyBulk}>
+              일괄 적용
+            </button>
             <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={deleteSelected}>
               <Icon name="trash" size={13} /> 선택 {selected.size}건 삭제
             </button>
@@ -244,11 +536,13 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
           </>
         )}
         <div style={{ flex: 1 }}></div>
-        <select className="select" style={{ width: 'auto' }} value={sortKey} onChange={e => setSortKey(e.target.value)}>
-          <option value="start">시작일 순</option>
-          <option value="mm">MM 큰 순</option>
-          <option value="priority">우선순위</option>
-        </select>
+        <label className="small subtle" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 4px' }}>
+          <input type="checkbox" checked={includeWon} onChange={e => setIncludeWon(e.target.checked)} />
+          100% 포함
+        </label>
+        <button className="btn btn-sm" onClick={clearColumnFilters} disabled={Object.values(columnFilters).every(v => !v)}>
+          <Icon name="filter" size={13} /> 필터 초기화
+        </button>
         <button className="btn btn-sm" onClick={doSync} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <SlackIcon size={13} /> 신규고객 동기화
         </button>
@@ -265,18 +559,33 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
               <th style={{ width: 30 }}>
                 <input type="checkbox" checked={selected.size > 0 && selected.size === filtered.length} onChange={toggleSelectAll} />
               </th>
-              <th style={{ width: 50 }}>#</th>
-              <th>고객</th>
-              <th>구분</th>
-              <th>상태</th>
-              <th>Sales</th>
-              <th>Pre-Sales</th>
-              <th>시작일</th>
-              <th>종료일</th>
-              <th style={{ textAlign: 'right' }}>MM</th>
-              <th>투입 인원</th>
-              <th>진행상세</th>
+              <SortTh label="우선순위" sortKey="priority" sortConfig={sortConfig} onSort={sortBy} width={82} />
+              <SortTh label="고객" sortKey="client" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="구분" sortKey="kind" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="상태" sortKey="status" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="수주확률" sortKey="winProbability" sortConfig={sortConfig} onSort={sortBy} align="right" />
+              <SortTh label="Sales" sortKey="sales" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="시작일" sortKey="start" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="종료일" sortKey="end" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="MM" sortKey="mm" sortConfig={sortConfig} onSort={sortBy} align="right" />
+              <SortTh label="투입 인원" sortKey="members" sortConfig={sortConfig} onSort={sortBy} />
+              <SortTh label="진행상세" sortKey="note" sortConfig={sortConfig} onSort={sortBy} />
               <th style={{ width: 40 }}></th>
+            </tr>
+            <tr>
+              <th></th>
+              <th><ColumnFilter value={columnFilters.priority} onChange={v => setColumnFilter('priority', v)} placeholder="최우선" /></th>
+              <th><ColumnFilter value={columnFilters.client} onChange={v => setColumnFilter('client', v)} placeholder="고객" /></th>
+              <th><ColumnSelect value={columnFilters.kind} onChange={v => setColumnFilter('kind', v)} options={PROJECT_KINDS} /></th>
+              <th><ColumnSelect value={columnFilters.status} onChange={v => setColumnFilter('status', v)} options={PIPELINE_STAGES.map(s => s.id)} /></th>
+              <th><ColumnFilter type="number" value={columnFilters.winProbability} onChange={v => setColumnFilter('winProbability', v)} placeholder="%" /></th>
+              <th><ColumnSelect value={columnFilters.sales} onChange={v => setColumnFilter('sales', v)} options={SALES_PEOPLE} /></th>
+              <th><ColumnFilter value={columnFilters.start} onChange={v => setColumnFilter('start', v)} placeholder="YYYY-MM" /></th>
+              <th><ColumnFilter value={columnFilters.end} onChange={v => setColumnFilter('end', v)} placeholder="YYYY-MM" /></th>
+              <th><ColumnFilter type="number" value={columnFilters.mm} onChange={v => setColumnFilter('mm', v)} placeholder="MM" /></th>
+              <th><ColumnFilter value={columnFilters.members} onChange={v => setColumnFilter('members', v)} placeholder="인원" /></th>
+              <th><ColumnFilter value={columnFilters.note} onChange={v => setColumnFilter('note', v)} placeholder="상세" /></th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -300,8 +609,8 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                   <td onClick={e => e.stopPropagation()}>
                     <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(p.id)} />
                   </td>
-                  <td className="tiny num subtle" onClick={() => onProjectClick(p.id)}>
-                    {p.priority === 99 ? '◉' : p.priority === 55 ? '◐' : '○'} {p.priority}
+                  <td className="small bold" onClick={() => onProjectClick(p.id)}>
+                    {priorityLabel(p.priority)}
                   </td>
                   <td onClick={() => onProjectClick(p.id)}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -322,8 +631,10 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                   </td>
                   <td onClick={() => onProjectClick(p.id)}><span className="badge" style={{ fontSize: 10 }}>{p.kind}</span></td>
                   <td onClick={() => onProjectClick(p.id)}><StatusPillInline status={p.status} /></td>
+                  <td className="small num bold" style={{ textAlign: 'right' }} onClick={() => onProjectClick(p.id)}>
+                    {formatWinProbability(p.winProbability)}
+                  </td>
                   <td className="small" onClick={() => onProjectClick(p.id)}>{p.sales}</td>
-                  <td className="small subtle" onClick={() => onProjectClick(p.id)}>{p.preSales || '—'}</td>
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.start?.slice(5) || '—'}</td>
                   <td className="small num subtle" onClick={() => onProjectClick(p.id)}>{p.end?.slice(5) || '—'}</td>
                   <td className="small num bold" style={{ textAlign: 'right' }} onClick={() => onProjectClick(p.id)}>{p.mm != null ? p.mm : '—'}</td>
@@ -354,8 +665,8 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
       </div>
 
       <div className="row gap-12" style={{ paddingLeft: 4 }}>
-        <div className="tiny subtle">◉ 우선순위 99 · ◐ 55 · ○ 1</div>
-        <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 일괄 삭제/상태변경</div>
+        <div className="tiny subtle">우선순위: 최우선(1) · 집중(55) · 관망(99)</div>
+        <div className="tiny subtle">· 행 <b>체크박스</b>로 다중 선택 → 컬럼별 일괄 변경/삭제</div>
         <div className="tiny subtle">· 행 끝 <b>⋮</b> 버튼으로 수정/삭제</div>
       </div>
 
@@ -378,8 +689,10 @@ function InlineEditRow({ draft, onChange, onSave, onCancel, onDelete }) {
     <tr style={{ background: 'var(--accent-weak)' }}>
       <td></td>
       <td>
-        <select style={{ ...inputStyle, width: 54 }} value={draft.priority} onChange={e => onChange('priority', +e.target.value)}>
-          <option value={99}>99</option><option value={55}>55</option><option value={1}>1</option>
+        <select style={{ ...inputStyle, width: 78 }} value={draft.priority} onChange={e => onChange('priority', +e.target.value)}>
+          <option value={1}>최우선</option>
+          <option value={55}>집중</option>
+          <option value={99}>관망</option>
         </select>
       </td>
       <td><input style={inputStyle} value={draft.client || ''} onChange={e => onChange('client', e.target.value)} autoFocus /></td>
@@ -393,8 +706,18 @@ function InlineEditRow({ draft, onChange, onSave, onCancel, onDelete }) {
           {PIPELINE_STAGES.map(s => <option key={s.id}>{s.id}</option>)}
         </select>
       </td>
+      <td>
+        <input
+          type="number"
+          min="0"
+          max="100"
+          step="1"
+          style={{ ...inputStyle, width: 68, textAlign: 'right' }}
+          value={draft.winProbability ?? ''}
+          onChange={e => onChange('winProbability', e.target.value === '' ? null : normalizeWinProbability(e.target.value))}
+        />
+      </td>
       <td><input style={{ ...inputStyle, width: 60 }} value={draft.sales || ''} onChange={e => onChange('sales', e.target.value)} /></td>
-      <td><input style={{ ...inputStyle, width: 60 }} value={draft.preSales || ''} onChange={e => onChange('preSales', e.target.value)} /></td>
       <td><input type="date" style={{ ...inputStyle, width: 110 }} value={draft.start || ''} onChange={e => onChange('start', e.target.value)} /></td>
       <td><input type="date" style={{ ...inputStyle, width: 110 }} value={draft.end || ''} onChange={e => onChange('end', e.target.value || null)} /></td>
       <td><input type="number" step="0.1" style={{ ...inputStyle, width: 60, textAlign: 'right' }} value={draft.mm ?? ''} onChange={e => onChange('mm', e.target.value === '' ? null : +e.target.value)} /></td>

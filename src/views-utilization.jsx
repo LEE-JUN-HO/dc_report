@@ -1,14 +1,69 @@
 // 주간 가동률 표 — 실제 데이터 버전
 const { useState: useStateU, useMemo: useMemoU } = React;
 
-function UtilizationView({ onOverride, onSelectUser }) {
+const ZERO_BILLING_WORK_COLOR = '#EF3226';
+const ZERO_BILLING_WORK_BG = '#FEE2E2';
+const ABSENCE_COLOR = '#D97706';
+const ABSENCE_BG = '#FFFBEA';
+const ABSENCE_STRIPE_COLOR = '#FFE501';
+const UNASSIGNED_BG = '#F8FAFC';
+
+function weekPeriodYear(week) { return week?.periodYear ?? week?.year; }
+function weekPeriodMonth(week) { return week?.periodMonth ?? week?.month; }
+function weekPeriodQuarter(week) { return week?.periodQuarter ?? week?.quarter; }
+function weekPeriodHalf(week) { return week?.periodHalf ?? week?.half; }
+
+function isZeroBillingWork(data) {
+  return !!data?.client && data?.hasValue && Number(data.value) === 0;
+}
+
+function isAbsence(data) {
+  return !!data?.note && !data?.client;
+}
+
+function isUnassigned(data) {
+  return !data?.client && !data?.note && Number(data?.value || 0) === 0;
+}
+
+function utilizationCellBg(data) {
+  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_BG;
+  if (isAbsence(data)) {
+    return `repeating-linear-gradient(135deg, ${ABSENCE_BG} 0 7px, ${ABSENCE_STRIPE_COLOR} 7px 10px, ${ABSENCE_BG} 10px 16px)`;
+  }
+  if (isUnassigned(data)) return UNASSIGNED_BG;
+  return heatColor(data?.value);
+}
+
+function utilizationCellTextColor(data) {
+  if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_COLOR;
+  if (isAbsence(data)) return '#713F12';
+  if (isUnassigned(data)) return 'var(--text-subtle)';
+  return heatTextColor(data?.value);
+}
+
+function utilizationCellShadow(data, isCurrent = false) {
+  const shadows = [];
+  if (isCurrent) shadows.push('inset 0 0 0 1px var(--accent)');
+  if (isZeroBillingWork(data)) shadows.push(`inset 3px 0 0 ${ZERO_BILLING_WORK_COLOR}`);
+  if (isAbsence(data)) shadows.push(`inset 0 0 0 1px ${ABSENCE_COLOR}55`);
+  return shadows.length ? shadows.join(', ') : 'none';
+}
+
+function utilizationCellLabel(data, compact = false) {
+  if (isZeroBillingWork(data)) return compact ? '0' : '0.0';
+  if (data?.value > 0) return compact ? (data.value * 100).toFixed(0) : data.value.toFixed(1);
+  if (isAbsence(data)) return '•';
+  return '';
+}
+
+function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const [layout, setLayout] = useStateU('table');
   const [teamFilter, setTeamFilter] = useStateU('all');
   const [statusFilter, setStatusFilter] = useStateU('active'); // active/all
   const [weekOffset, setWeekOffset] = useStateU(0);
   const [search, setSearch] = useStateU('');
 
-  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET } = window.APP_DATA;
+  const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET, isUserInUtilizationBase } = window.APP_DATA;
 
   const WINDOW_SIZE = 8;
   const curIdx = currentWeekIdx();
@@ -16,15 +71,14 @@ function UtilizationView({ onOverride, onSelectUser }) {
   const visibleWeeks = WEEKS.slice(startIdx, startIdx + WINDOW_SIZE);
   const currentWeek = WEEKS[curIdx];
 
-  // ===== DC 제외한 실무팀 집계 =====
+  // ===== 계산 모수 기준 집계 =====
   const summaryStats = useMemoU(() => {
-    const fieldUsers = USERS.filter(u => u.status === 'active' && u.team !== 'DC');
     const avgOf = (filterFn) => {
       const ws = WEEKS.filter(filterFn);
-      if (ws.length === 0 || fieldUsers.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
+      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
       let sum = 0, n = 0, over = 0, under = 0;
-      fieldUsers.forEach(u => {
-        ws.forEach(w => {
+      ws.forEach(w => {
+        USERS.filter(u => isUserInUtilizationBase(u, w)).forEach(u => {
           const v = computeUtilization(u.id, w.id).value;
           sum += v; n++;
           if (ws.length === 1) {
@@ -33,25 +87,30 @@ function UtilizationView({ onOverride, onSelectUser }) {
           }
         });
       });
-      return { avg: sum / n, overCount: over, underCount: under };
+      return { avg: sum / (n || 1), overCount: over, underCount: under };
     };
-    const nm  = currentWeek.month % 12 + 1;
-    const nmY = nm === 1 ? currentWeek.year + 1 : currentWeek.year;
+    const cm = weekPeriodMonth(currentWeek);
+    const cy = weekPeriodYear(currentWeek);
+    const cq = weekPeriodQuarter(currentWeek);
+    const ch = weekPeriodHalf(currentWeek);
+    const nm  = cm % 12 + 1;
+    const nmY = nm === 1 ? cy + 1 : cy;
     const nnm  = nm % 12 + 1;
     const nnmY = nnm === 1 ? nmY + 1 : nmY;
     return {
-      userCount: fieldUsers.length,
+      userCount: USERS.filter(u => isUserInUtilizationBase(u, currentWeek)).length,
       week:          avgOf(w => w.id === currentWeek.id),
-      month:         avgOf(w => w.month === currentWeek.month && w.year === currentWeek.year),
-      nextMonth:     avgOf(w => w.month === nm  && w.year === nmY),
-      nextNextMonth: avgOf(w => w.month === nnm && w.year === nnmY),
-      quarter:       avgOf(w => w.quarter === currentWeek.quarter && w.year === currentWeek.year),
-      half:          avgOf(w => w.half === currentWeek.half && w.year === currentWeek.year),
+      month:         avgOf(w => weekPeriodMonth(w) === cm && weekPeriodYear(w) === cy),
+      nextMonth:     avgOf(w => weekPeriodMonth(w) === nm  && weekPeriodYear(w) === nmY),
+      nextNextMonth: avgOf(w => weekPeriodMonth(w) === nnm && weekPeriodYear(w) === nnmY),
+      quarter:       avgOf(w => weekPeriodQuarter(w) === cq && weekPeriodYear(w) === cy),
+      half:          avgOf(w => weekPeriodHalf(w) === ch && weekPeriodYear(w) === cy),
       year:          avgOf(w => w.year === currentWeek.year),
+      periodMeta:         { month: cm, year: cy, quarter: cq, half: ch },
       nextMonthMeta:     { month: nm,  year: nmY },
       nextNextMonthMeta: { month: nnm, year: nnmY },
     };
-  }, [curIdx]);
+  }, [curIdx, dataVersion]);
 
   const visibleUsers = useMemoU(() => {
     return USERS.filter(u => {
@@ -60,7 +119,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
       if (search && !u.name.includes(search)) return false;
       return true;
     });
-  }, [teamFilter, statusFilter, search]);
+  }, [teamFilter, statusFilter, search, dataVersion]);
 
   const grouped = useMemoU(() => {
     const map = {};
@@ -69,7 +128,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
       map[u.team].push(u);
     });
     return TEAMS.filter(t => map[t.id]).map(t => ({ team: t, users: map[t.id] }));
-  }, [visibleUsers]);
+  }, [visibleUsers, dataVersion]);
 
   return (
     <div className="col gap-16">
@@ -126,15 +185,23 @@ function UtilizationView({ onOverride, onSelectUser }) {
         <div className="heat-legend">
           <span>가동률</span>
           <span className="heat-legend-swatches">
-            {[0, 0.2, 0.4, 0.6, 0.8, 1.0].map(v => (
+            {[0.2, 0.4, 0.6, 0.8, 1.0].map(v => (
               <span key={v} className="heat-legend-swatch" style={{ background: heatColor(v) }} title={`${(v*100).toFixed(0)}%`}></span>
             ))}
           </span>
-          <span className="tiny">0 → 100%</span>
+          <span className="tiny">20 → 100%</span>
         </div>
         <div className="heat-legend">
-          <span style={{ width: 6, height: 6, background: 'var(--warn)', borderRadius: '50%', display: 'inline-block' }}></span>
-          <span>휴가/교육 (사유 있음)</span>
+          <span style={{ width: 14, height: 12, background: ZERO_BILLING_WORK_BG, borderRadius: 2, display: 'inline-block', boxShadow: `inset 3px 0 0 ${ZERO_BILLING_WORK_COLOR}` }}></span>
+          <span>업무 0%</span>
+        </div>
+        <div className="heat-legend">
+          <span style={{ width: 14, height: 12, background: `repeating-linear-gradient(135deg, ${ABSENCE_BG} 0 5px, ${ABSENCE_STRIPE_COLOR} 5px 7px, ${ABSENCE_BG} 7px 12px)`, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
+          <span>부재</span>
+        </div>
+        <div className="heat-legend">
+          <span style={{ width: 14, height: 12, background: UNASSIGNED_BG, borderRadius: 2, display: 'inline-block', border: '1px solid var(--border)' }}></span>
+          <span>미배정</span>
         </div>
         <div style={{ flex: 1 }}></div>
         <div className="tiny subtle">총 {visibleUsers.length}명 표시 · 목표 85%</div>
@@ -149,7 +216,7 @@ function UtilizationView({ onOverride, onSelectUser }) {
 
 // ===== TABLE =====
 function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
-  const { computeUtilization, LEVEL_COLORS } = window.APP_DATA;
+  const { computeUtilization, LEVEL_COLORS, isUserInUtilizationBase } = window.APP_DATA;
   const NAME_W = 150;
   const LVL_W  = 56;
   const AVG_W  = 60;
@@ -181,13 +248,16 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
               <div style={{ padding: '6px 8px', textAlign: 'center' }}>
                 {(() => {
                   const all = [];
-                  users.forEach(u => weeks.forEach(w => all.push(computeUtilization(u.id, w.id).value)));
+                  users.forEach(u => weeks.forEach(w => {
+                    if (isUserInUtilizationBase(u, w)) all.push(computeUtilization(u.id, w.id).value);
+                  }));
                   const avg = all.reduce((a,b)=>a+b,0) / (all.length || 1);
                   return <span className="tiny num bold" style={{ color: avg > 1 ? 'var(--danger)' : avg < 0.5 ? 'var(--warn)' : 'var(--success)' }}>{(avg*100).toFixed(0)}%</span>;
                 })()}
               </div>
               {weeks.map(w => {
-                const teamAvg = users.reduce((s, u) => s + computeUtilization(u.id, w.id).value, 0) / (users.length || 1);
+                const baseUsers = users.filter(u => isUserInUtilizationBase(u, w));
+                const teamAvg = baseUsers.reduce((s, u) => s + computeUtilization(u.id, w.id).value, 0) / (baseUsers.length || 1);
                 return (
                   <div key={w.id} style={{ padding: '6px 6px', textAlign: 'center', borderLeft: '1px solid var(--border)' }}>
                     <span className="tiny num" style={{ fontWeight: 600, color: teamAvg > 1 ? 'var(--danger)' : teamAvg > 0.8 ? 'var(--success)' : 'var(--text-muted)' }}>
@@ -218,7 +288,7 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
                 </div>
                 {weeks.map(w => {
                   const u_ = computeUtilization(u.id, w.id);
-                  const bg = heatColor(u_.value);
+                  const bg = utilizationCellBg(u_);
                   return <UtilCell key={w.id} data={u_} bg={bg} isCurrent={w.num - 1 === window.APP_DATA.currentWeekIdx()} onClick={() => onOverride(u.id, w.id, u_)} />;
                 })}
               </div>
@@ -238,18 +308,18 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       className={`util-cell ${hasNote ? 'manual' : ''}`}
       style={{
         background: bg,
-        color: heatTextColor(data.value),
+        color: utilizationCellTextColor(data),
         borderLeft: '1px solid var(--border)',
         borderRight: 'none',
         borderBottom: 'none',
-        boxShadow: isCurrent ? 'inset 0 0 0 1px var(--accent)' : 'none',
+        boxShadow: utilizationCellShadow(data, isCurrent),
         position: 'relative',
       }}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <span className="num">{data.value > 0 ? data.value.toFixed(1) : hasNote ? '•' : ''}</span>
+      <span className="num">{utilizationCellLabel(data)}</span>
       {hover && (data.client || data.note) && (
         <div style={{
           position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
@@ -299,12 +369,13 @@ function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride }) {
                   return (
                     <div key={w.id} onClick={() => onOverride(u.id, w.id, d)} style={{
                       height: 30, margin: '0 2px', borderRadius: 5,
-                      background: heatColor(d.value),
+                      background: utilizationCellBg(d),
                       display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 600,
-                      color: heatTextColor(d.value), cursor: 'pointer', position: 'relative',
+                      color: utilizationCellTextColor(d), cursor: 'pointer', position: 'relative',
+                      boxShadow: utilizationCellShadow(d),
                     }}>
-                      {d.value > 0 ? (d.value * 100).toFixed(0) : d.note ? '·' : ''}
-                      {d.note && !d.client && <span style={{ position: 'absolute', top: 2, right: 3, width: 4, height: 4, background: 'var(--warn)', borderRadius: '50%' }}></span>}
+                      {utilizationCellLabel(d, true)}
+                      {isAbsence(d) && <span style={{ position: 'absolute', top: 2, right: 3, width: 4, height: 4, background: ABSENCE_COLOR, borderRadius: '50%' }}></span>}
                     </div>
                   );
                 })}
@@ -421,20 +492,26 @@ function UtilGantt({ grouped, weeks, onSelectUser }) {
 // ===== 상단 요약 배너 (DC 제외 전체팀) =====
 function SummaryBanner({ stats, currentWeek, kpiTarget }) {
   const { nextMonthMeta: nm, nextNextMonthMeta: nnm } = stats;
+  const period = stats.periodMeta || {
+    year: weekPeriodYear(currentWeek),
+    month: weekPeriodMonth(currentWeek),
+    quarter: weekPeriodQuarter(currentWeek),
+    half: weekPeriodHalf(currentWeek),
+  };
   const cards = [
     { key: 'week',          label: '이번 주',   sub: `${currentWeek.label} (${currentWeek.range})`,  value: stats.week.avg,          extra: { over: stats.week.overCount, under: stats.week.underCount } },
-    { key: 'month',         label: '이번 달',   sub: `${currentWeek.year}년 ${currentWeek.month}월`, value: stats.month.avg },
+    { key: 'month',         label: '이번 달',   sub: `${period.year}년 ${period.month}월`, value: stats.month.avg },
     { key: 'nextMonth',     label: '다음달',    sub: `${nm.year}년 ${nm.month}월`,                   value: stats.nextMonth.avg,     future: true },
     { key: 'nextNextMonth', label: '다다음달',  sub: `${nnm.year}년 ${nnm.month}월`,                 value: stats.nextNextMonth.avg, future: true },
-    { key: 'quarter',       label: '분기',      sub: `Q${currentWeek.quarter}`,                      value: stats.quarter.avg },
-    { key: 'half',          label: '반기',      sub: `${currentWeek.half}`,                          value: stats.half.avg },
+    { key: 'quarter',       label: '분기',      sub: `Q${period.quarter}`,                           value: stats.quarter.avg },
+    { key: 'half',          label: '반기',      sub: `${period.half}`,                               value: stats.half.avg },
     { key: 'year',          label: '연간',      sub: `${currentWeek.year}`,                          value: stats.year.avg },
   ];
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ padding: '12px 18px 10px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid var(--border)' }}>
         <span className="tiny bold" style={{ color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>전체 팀 가동률</span>
-        <span className="tiny subtle">DC 본부 제외 · {stats.userCount}명 재직 기준 · 목표 {(kpiTarget * 100).toFixed(0)}%</span>
+        <span className="tiny subtle">계산 모수 {stats.userCount}명 · 목표 {(kpiTarget * 100).toFixed(0)}%</span>
         <div style={{ flex: 1 }}></div>
         {(stats.week.overCount > 0 || stats.week.underCount > 0) && (
           <>

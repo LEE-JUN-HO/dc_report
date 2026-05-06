@@ -190,8 +190,13 @@ function DashboardView({ onNavigate, dataVersion }) {
               <div className="card-sub">지난 12주 실적 + 향후 8주 계획</div>
             </div>
             <div style={{ flex: 1 }}></div>
-            <span className="badge"><span className="badge-dot" style={{ background: 'var(--accent)' }}></span>실적</span>
-            <span className="badge"><span className="badge-dot" style={{ background: 'var(--text-subtle)' }}></span>계획</span>
+            <span className="badge"><span className="badge-dot" style={{ background: '#3182F6' }}></span>실적</span>
+            <span className="badge">
+              <svg width="14" height="6" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                <line x1="0" y1="3" x2="14" y2="3" stroke="#8B95A1" strokeWidth="2" strokeDasharray="3 2" />
+              </svg>
+              계획
+            </span>
           </div>
           <div style={{ padding: '18px 18px 14px', flex: 1, minHeight: 300, display: 'flex' }}>
             <TrendChart data={trend} height={300} />
@@ -253,6 +258,7 @@ function LevelCard({ activeUsers }) {
         <div className="small bold">등급 구성</div>
         <div className="tiny subtle">재직자 {activeUsers.length}명</div>
       </div>
+      <div style={{ height: 1, background: 'var(--border)', flexShrink: 0 }} />
       <div style={{ padding: '4px 18px 16px', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         {LEVELS.map(l => (
           <div key={l} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

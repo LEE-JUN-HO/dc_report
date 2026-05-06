@@ -395,14 +395,46 @@ function AlertCard({ title, iconBg, iconColor, count, subtitle, items, onItemCli
 
 function HelpTip({ text }) {
   if (!text) return null;
+  const [visible, setVisible] = React.useState(false);
+  const [coords, setCoords] = React.useState({ top: 0, left: 0 });
+  const ref = React.useRef(null);
+
+  const show = () => {
+    if (ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      setCoords({ top: r.bottom + 8, left: r.left + r.width / 2 });
+    }
+    setVisible(true);
+  };
+  const hide = () => setVisible(false);
+
   return (
-    <span
-      className="help-tip"
-      tabIndex="0"
-      aria-label={text}
-    >
+    <span ref={ref} className="help-tip" tabIndex="0" aria-label={text}
+      onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
       ?
-      <span className="help-tip-popover" role="tooltip">{text}</span>
+      {visible && (
+        <span role="tooltip" style={{
+          position: 'fixed',
+          top: coords.top,
+          left: coords.left,
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          maxWidth: 280,
+          padding: '10px 14px',
+          borderRadius: 8,
+          background: '#191F28',
+          color: '#fff',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          fontSize: 13,
+          fontWeight: 400,
+          lineHeight: 1.6,
+          whiteSpace: 'normal',
+          textAlign: 'left',
+          pointerEvents: 'none',
+        }}>
+          {text}
+        </span>
+      )}
     </span>
   );
 }

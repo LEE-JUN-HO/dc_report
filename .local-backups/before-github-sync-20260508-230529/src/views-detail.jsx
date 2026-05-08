@@ -8,6 +8,8 @@ function UserDetail({ userId, onBack, onProjectClick }) {
   if (!user) return <div className="muted">사용자 없음</div>;
   const team = TEAMS.find(t => t.id === user.team);
   const curIdx = currentWeekIdx();
+  const dataYear = WEEKS[0]?.year || new Date().getFullYear();
+  const totalWeeks = WEEKS.length;
 
   // 전체 53주 가동률
   const allWeeks = WEEKS.map(w => ({
@@ -78,7 +80,7 @@ function UserDetail({ userId, onBack, onProjectClick }) {
       <div className="card">
         <div className="card-header">
           <div>
-            <div className="card-title">2026년 주간 가동률 (W1~W53)</div>
+            <div className="card-title">{dataYear}년 주간 가동률 (W1~W{totalWeeks})</div>
             <div className="card-sub">왼쪽부터 W1 · 옅은 회색: 미래 계획</div>
           </div>
         </div>
@@ -89,7 +91,7 @@ function UserDetail({ userId, onBack, onProjectClick }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div className="card">
-          <div className="card-header"><div className="card-title">고객사별 누적</div><div className="card-sub">2026 총 {clientList.length}개 고객사</div></div>
+          <div className="card-header"><div className="card-title">고객사별 누적</div><div className="card-sub">{dataYear} 총 {clientList.length}개 고객사</div></div>
           <div style={{ padding: '10px 18px 14px' }}>
             {clientList.length === 0 && <div className="small subtle">배정 이력 없음</div>}
             {clientList.map(([client, s]) => (

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(cp 'C:/Users/myste/OneDrive/Documents/New project/dc_report/.claude/worktrees/competent-bhabha-8430ce/index.html' 'C:/Users/myste/OneDrive/Documents/New project/dc_report/index.html')",
+      "Bash(cp 'C:/Users/myste/OneDrive/Documents/New project/dc_report/.claude/worktrees/competent-bhabha-8430ce/src/supabase-adapter.js' 'C:/Users/myste/OneDrive/Documents/New project/dc_report/src/supabase-adapter.js')",
+      "Bash(cp 'C:/Users/myste/OneDrive/Documents/New project/dc_report/.claude/worktrees/competent-bhabha-8430ce/src/views-auth.jsx' 'C:/Users/myste/OneDrive/Documents/New project/dc_report/src/views-auth.jsx')",
+      "Bash(cp 'C:/Users/myste/OneDrive/Documents/New project/dc_report/.claude/worktrees/competent-bhabha-8430ce/src/views-settings.jsx' 'C:/Users/myste/OneDrive/Documents/New project/dc_report/src/views-settings.jsx')",
+      "Bash(cp 'C:/Users/myste/OneDrive/Documents/New project/dc_report/.claude/worktrees/competent-bhabha-8430ce/src/app.jsx' 'C:/Users/myste/OneDrive/Documents/New project/dc_report/src/app.jsx')"
+    ]
+  }
+}

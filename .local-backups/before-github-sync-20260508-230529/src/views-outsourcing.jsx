@@ -243,7 +243,7 @@ function OutsourcingSummaryBanner({ stats, selectedQuarter, onSelectQuarter }) {
     const periods = [
       { label: '당월',  sub: `${currentMonth?.month || '?'}월`,  data: data.month   },
       { label: '분기',  sub: `Q${selectedQuarter}`,              data: data.quarter },
-      { label: '연간',  sub: '2026',                              data: data.year    },
+      { label: '연간',  sub: String(window.APP_DATA?.MONTHS?.[0]?.year || new Date().getFullYear()), data: data.year    },
     ];
     return (
       <div style={{ flex: 1 }}>

@@ -75,19 +75,26 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const summaryStats = useMemoU(() => {
     const avgOf = (filterFn) => {
       const ws = WEEKS.filter(filterFn);
-      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0 };
+      if (ws.length === 0) return { avg: 0, overCount: 0, underCount: 0, underUsers: [] };
       let sum = 0, n = 0, over = 0, under = 0;
+      const underUsers = [];
       ws.forEach(w => {
         USERS.filter(u => isUserInUtilizationBase(u, w)).forEach(u => {
-          const v = computeUtilization(u.id, w.id).value;
+          const d = computeUtilization(u.id, w.id);
+          const v = d.value;
           sum += v; n++;
           if (ws.length === 1) {
-            if (v > 1.0) over++;
-            else if (v < 0.5) under++;
+            if (v > 1.0) {
+              over++;
+            } else if (v < 0.5 && !isZeroBillingWork(d) && !isAbsence(d)) {
+              // 대시보드와 동일 기준: 무상투입·부재 제외
+              under++;
+              underUsers.push({ user: u, value: v });
+            }
           }
         });
       });
-      return { avg: sum / (n || 1), overCount: over, underCount: under };
+      return { avg: sum / (n || 1), overCount: over, underCount: under, underUsers };
     };
     const cm = weekPeriodMonth(currentWeek);
     const cy = weekPeriodYear(currentWeek);
@@ -320,15 +327,43 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       onMouseLeave={() => setHover(false)}
     >
       <span className="num">{utilizationCellLabel(data)}</span>
-      {hover && (data.client || data.note) && (
+      {hover && (data.client || data.note || data.hasValue) && (
         <div style={{
-          position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)',
-          background: 'var(--text)', color: 'white', padding: '8px 10px', borderRadius: 6,
-          fontSize: 11, whiteSpace: 'nowrap', zIndex: 100, boxShadow: 'var(--shadow-lg)',
-          pointerEvents: 'none', marginTop: 4,
+          position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          background: '#191F28',
+          border: '1px solid rgba(255,255,255,0.12)',
+          color: '#FFFFFF',
+          padding: '9px 13px',
+          borderRadius: 8,
+          fontSize: 13,
+          fontWeight: 400,
+          lineHeight: 1.7,
+          whiteSpace: 'nowrap',
+          zIndex: 200,
+          boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
+          pointerEvents: 'none',
+          minWidth: 140,
         }}>
-          {data.client && <div>{data.client} · {data.value}</div>}
-          {data.note && <div style={{ opacity: 0.7 }}>📌 {data.note}</div>}
+          {data.client && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#A8B4C0' }}>고객사</span>
+              <span style={{ fontWeight: 600, color: '#FFFFFF' }}>{data.client}</span>
+            </div>
+          )}
+          {data.hasValue && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+              <span style={{ color: '#A8B4C0' }}>가동률</span>
+              <span style={{ fontWeight: 700, color: isZeroBillingWork(data) ? '#F04452' : '#4FC3F7' }}>
+                {isZeroBillingWork(data) ? '0% (무상투입)' : `${(data.value * 100).toFixed(0)}%`}
+              </span>
+            </div>
+          )}
+          {data.note && (
+            <div style={{ display: 'flex', gap: 8, marginTop: data.client || data.hasValue ? 4 : 0, paddingTop: data.client || data.hasValue ? 4 : 0, borderTop: data.client || data.hasValue ? '1px solid rgba(255,255,255,0.1)' : 'none' }}>
+              <span style={{ color: '#F5A623' }}>📌</span>
+              <span style={{ color: '#FFE082' }}>{data.note}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -521,9 +556,7 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
               </span>
             )}
             {stats.week.underCount > 0 && (
-              <span className="badge" style={{ background: 'var(--warn-weak)', color: 'var(--warn)' }}>
-                저활용 {stats.week.underCount}명
-              </span>
+              <UnderBadge count={stats.week.underCount} users={stats.week.underUsers || []} />
             )}
           </>
         )}
@@ -534,6 +567,48 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function UnderBadge({ count, users }) {
+  const [open, setOpen] = useStateU(false);
+  return (
+    <span
+      className="badge"
+      style={{ background: 'var(--warn-weak)', color: 'var(--warn)', cursor: 'pointer', position: 'relative' }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      저활용 {count}명
+      {open && (
+        <span style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+          background: '#191F28', color: 'white',
+          borderRadius: 8, padding: '10px 14px',
+          fontSize: 12, fontWeight: 400, lineHeight: 1.7,
+          whiteSpace: 'nowrap', zIndex: 200,
+          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+          minWidth: 200,
+          pointerEvents: 'none',
+        }}>
+          <span style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: '#F5A623' }}>
+            저활용 기준
+          </span>
+          <span style={{ display: 'block', color: '#8B95A1', marginBottom: 8, fontSize: 11 }}>
+            이번 주 가동률 50% 미만<br />
+            (무상투입·부재 제외)
+          </span>
+          {users.length === 0 ? (
+            <span style={{ color: '#8B95A1' }}>해당 없음</span>
+          ) : users.map((item, i) => (
+            <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '2px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+              <span>{item.user.name}</span>
+              <span style={{ color: '#F5A623', fontWeight: 600 }}>{(item.value * 100).toFixed(0)}%</span>
+            </span>
+          ))}
+        </span>
+      )}
+    </span>
   );
 }
 

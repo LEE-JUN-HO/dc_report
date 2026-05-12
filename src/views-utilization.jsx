@@ -62,6 +62,7 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
   const [statusFilter, setStatusFilter] = useStateU('active'); // active/all
   const [weekOffset, setWeekOffset] = useStateU(0);
   const [search, setSearch] = useStateU('');
+  const isViewer = window.__RESOURCE_HUB_AUTH__?.status === 'viewer';
 
   const { TEAMS, USERS, WEEKS, computeUtilization, currentWeekIdx, STATUSES, KPI_TARGET, isUserInUtilizationBase } = window.APP_DATA;
 
@@ -214,8 +215,8 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
         <div className="tiny subtle">총 {visibleUsers.length}명 표시 · 목표 85%</div>
       </div>
 
-      {layout === 'table'   && <UtilTable grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={onOverride} />}
-      {layout === 'heatmap' && <UtilHeatmap grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={onOverride} />}
+      {layout === 'table'   && <UtilTable grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} />}
+      {layout === 'heatmap' && <UtilHeatmap grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} />}
       {layout === 'gantt'   && <UtilGantt grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} />}
     </div>
   );

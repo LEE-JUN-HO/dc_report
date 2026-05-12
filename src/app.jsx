@@ -71,7 +71,11 @@ function App() {
     }
   }, [tweaks]);
 
+  const isViewer = window.__RESOURCE_HUB_AUTH__?.status === 'viewer';
+
   const navigate = (v, param) => {
+    // viewer는 외주관리·설정 접근 차단
+    if (isViewer && (v === 'outsourcing' || v === 'settings')) return;
     if (v === 'user' || v === 'team' || v === 'project') {
       setDetailParams({ view: v, id: param });
       setView(v);
@@ -370,13 +374,15 @@ function Sidebar({ view, onNavigate }) {
   const APP = window.APP_DATA || {};
   const currentWeek = APP.WEEKS?.[APP.currentWeekIdx?.()];
   const todayLabel = APP.TODAY && APP.fmtYMD ? APP.fmtYMD(APP.TODAY) : '2026';
-  const items = [
+  const isViewer = window.__RESOURCE_HUB_AUTH__?.status === 'viewer';
+  const allItems = [
     { id: 'dashboard',   label: '대시보드',       icon: 'dashboard' },
     { id: 'utilization', label: '주간 가동률',     icon: 'grid' },
     { id: 'pipeline',    label: '영업 파이프라인', icon: 'pipeline' },
-    { id: 'outsourcing', label: '월간 외주관리',   icon: 'briefcase' },
+    { id: 'outsourcing', label: '월간 외주관리',   icon: 'briefcase', adminOnly: true },
   ];
-  const items2 = [{ id: 'settings', label: '설정', icon: 'settings' }];
+  const items = isViewer ? allItems.filter(i => !i.adminOnly) : allItems;
+  const items2 = isViewer ? [] : [{ id: 'settings', label: '설정', icon: 'settings' }];
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
@@ -397,13 +403,17 @@ function Sidebar({ view, onNavigate }) {
           {item.label}
         </button>
       ))}
-      <div className="sidebar-section-label">Admin</div>
-      {items2.map(item => (
-        <button key={item.id} className={`sidebar-item ${view === item.id ? 'active' : ''}`} onClick={() => onNavigate(item.id)}>
-          <span className="sidebar-item-icon"><Icon name={item.icon} size={15} /></span>
-          {item.label}
-        </button>
-      ))}
+      {items2.length > 0 && (
+        <>
+          <div className="sidebar-section-label">Admin</div>
+          {items2.map(item => (
+            <button key={item.id} className={`sidebar-item ${view === item.id ? 'active' : ''}`} onClick={() => onNavigate(item.id)}>
+              <span className="sidebar-item-icon"><Icon name={item.icon} size={15} /></span>
+              {item.label}
+            </button>
+          ))}
+        </>
+      )}
       <div className="sidebar-footer">
         <div>v0.2 · {todayLabel}{currentWeek ? ` (${currentWeek.label})` : ''}</div>
         <div style={{ marginTop: 4 }}>실데이터 반영본</div>
@@ -501,7 +511,8 @@ function UserBadge() {
   }
 
   const name    = auth.profile?.name || auth.user.email?.split('@')[0] || '사용자';
-  const isAdmin = auth.status === 'admin';
+  const isAdmin  = auth.status === 'admin';
+  const isViewer = auth.status === 'viewer';
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -514,7 +525,7 @@ function UserBadge() {
       >
         <Avatar name={name} userId={auth.user.id} size="sm" />
         <span className="small bold">{name}</span>
-        <span className="tiny subtle">{isAdmin ? '관리자' : '일반사용자'}</span>
+        <span className="tiny subtle">{isAdmin ? '관리자' : isViewer ? '뷰어' : '일반사용자'}</span>
       </button>
       {menuOpen && (
         <div style={{
@@ -585,7 +596,7 @@ function Root() {
     return <AuthView authState={authState} onLogout={handleLogout} />;
   }
 
-  // 승인된 사용자 (approved / admin)
+  // 승인된 사용자 (approved / admin / viewer)
   return <App />;
 }
 

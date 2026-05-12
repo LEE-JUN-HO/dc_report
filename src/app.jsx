@@ -322,8 +322,8 @@ function App() {
             {view === 'project' && detailParams && <ProjectDetail
               projectId={detailParams.id}
               onBack={() => navigate('pipeline')}
-              onEdit={openEditProject}
-              onDelete={(id) => {
+              onEdit={isViewer ? null : openEditProject}
+              onDelete={isViewer ? null : (id) => {
                 if (confirm('이 건을 삭제하시겠습니까?')) {
                   deletePipelineEntry(id);
                   navigate('pipeline');

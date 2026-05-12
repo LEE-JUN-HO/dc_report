@@ -269,12 +269,16 @@ function ProjectDetail({ projectId, onBack, onEdit, onDelete }) {
           <Icon name="chevronL" size={13} /> 뒤로
         </button>
         <div style={{ flex: 1 }}></div>
-        <button className="btn btn-sm" onClick={() => onEdit && onEdit(p.id)}>
-          <Icon name="edit" size={13} /> 수정
-        </button>
-        <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => onDelete && onDelete(p.id)}>
-          <Icon name="trash" size={13} /> 삭제
-        </button>
+        {onEdit && (
+          <button className="btn btn-sm" onClick={() => onEdit(p.id)}>
+            <Icon name="edit" size={13} /> 수정
+          </button>
+        )}
+        {onDelete && (
+          <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={() => onDelete(p.id)}>
+            <Icon name="trash" size={13} /> 삭제
+          </button>
+        )}
       </div>
 
       <div className="card" style={{ padding: '22px 26px' }}>

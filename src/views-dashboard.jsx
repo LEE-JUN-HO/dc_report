@@ -254,6 +254,7 @@ function DashboardView({ onNavigate, dataVersion }) {
 }
 
 function NoticeCard() {
+  const isViewer = window.__RESOURCE_HUB_AUTH__?.status === 'viewer';
   const [notices, setNotices] = React.useState([]);
   const [comments, setComments] = React.useState({});
   const [writing, setWriting] = React.useState(false);
@@ -382,7 +383,7 @@ function NoticeCard() {
           <div className="small bold">공지 · 메모</div>
           <div className="tiny subtle">팀 공유 · {notices.length}건</div>
         </div>
-        {!writing && (
+        {!writing && !isViewer && (
           <button onClick={startWrite} style={{
             display: 'flex', alignItems: 'center', gap: 4,
             padding: '4px 10px', borderRadius: 6,

@@ -253,6 +253,7 @@ function BulkValueControl({ config, value, onChange }) {
 
 function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChange, dataVersion }) {
   const { PIPELINE, PIPELINE_STAGES, PROJECT_KINDS, SALES_PEOPLE } = window.APP_DATA;
+  const isViewer = window.__RESOURCE_HUB_AUTH__?.status === 'viewer';
   const [statusFilter, setStatusFilter] = useStatePipe('all');
   const [kindFilter, setKindFilter] = useStatePipe('all');
   const [salesFilter, setSalesFilter] = useStatePipe('all');
@@ -517,9 +518,11 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
             <button className="btn btn-primary btn-sm" onClick={applyBulkSelected} disabled={!canApplyBulk}>
               일괄 적용
             </button>
-            <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={deleteSelected}>
-              <Icon name="trash" size={13} /> 선택 {selected.size}건 삭제
-            </button>
+            {!isViewer && (
+              <button className="btn btn-sm" style={{ color: 'var(--danger)', borderColor: 'var(--danger)' }} onClick={deleteSelected}>
+                <Icon name="trash" size={13} /> 선택 {selected.size}건 삭제
+              </button>
+            )}
             <button className="btn btn-sm btn-ghost" onClick={() => setSelected(new Set())}>선택 해제</button>
           </>
         ) : (
@@ -543,12 +546,16 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
         <button className="btn btn-sm" onClick={clearColumnFilters} disabled={Object.values(columnFilters).every(v => !v)}>
           <Icon name="filter" size={13} /> 필터 초기화
         </button>
-        <button className="btn btn-sm" onClick={doSync} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          <SlackIcon size={13} /> 신규고객 동기화
-        </button>
-        <button className="btn btn-primary btn-sm" onClick={onNewProject}>
-          <Icon name="plus" size={13} /> 신규 건 추가
-        </button>
+        {!isViewer && (
+          <>
+            <button className="btn btn-sm" onClick={doSync} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <SlackIcon size={13} /> 신규고객 동기화
+            </button>
+            <button className="btn btn-primary btn-sm" onClick={onNewProject}>
+              <Icon name="plus" size={13} /> 신규 건 추가
+            </button>
+          </>
+        )}
       </div>
 
       {/* 테이블 */}
@@ -648,11 +655,11 @@ function PipelineView({ onProjectClick, onNewProject, onEditProject, onDataChang
                         background: 'var(--bg-elev)', border: '1px solid var(--border)', borderRadius: 6,
                         boxShadow: 'var(--shadow-lg)', minWidth: 160, padding: 4,
                       }}>
-                        <MenuItem icon="edit" label="빠른 수정 (인라인)" onClick={() => startEdit(p)} />
-                        <MenuItem icon="edit" label="상세 수정 (모달)" onClick={() => { onEditProject(p.id); setMenuOpenId(null); }} />
+                        {!isViewer && <MenuItem icon="edit" label="빠른 수정 (인라인)" onClick={() => startEdit(p)} />}
+                        {!isViewer && <MenuItem icon="edit" label="상세 수정 (모달)" onClick={() => { onEditProject(p.id); setMenuOpenId(null); }} />}
                         <MenuItem icon="briefcase" label="상세 보기" onClick={() => { onProjectClick(p.id); setMenuOpenId(null); }} />
-                        <div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }}></div>
-                        <MenuItem icon="trash" label="삭제" danger onClick={() => deleteOne(p.id)} />
+                        {!isViewer && <><div style={{ height: 1, background: 'var(--border)', margin: '3px 0' }}></div>
+                        <MenuItem icon="trash" label="삭제" danger onClick={() => deleteOne(p.id)} /></>}
                       </div>
                     )}
                   </td>

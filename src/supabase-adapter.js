@@ -68,7 +68,7 @@
         console.warn('[Resource Hub] profiles 조회 실패:', profErr.message);
       }
       const status = profile?.status || 'pending';
-      if (status !== 'approved' && status !== 'admin') {
+      if (status !== 'approved' && status !== 'admin' && status !== 'viewer') {
         // pending / rejected → 앱 진입 불가
         window.__RESOURCE_HUB_AUTH__ = { status, user: session.user, profile };
         window.dispatchEvent(new CustomEvent('auth-state-changed'));

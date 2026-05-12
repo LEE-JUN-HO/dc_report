@@ -1,5 +1,5 @@
 // 주간 가동률 표 — 실제 데이터 버전
-const { useState: useStateU, useMemo: useMemoU } = React;
+const { useState: useStateU, useMemo: useMemoU, useRef: useRefU } = React;
 
 const ZERO_BILLING_WORK_COLOR = '#EF3226';
 const ZERO_BILLING_WORK_BG = '#FEE2E2';
@@ -310,9 +310,21 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
 
 function UtilCell({ data, bg, isCurrent, onClick }) {
   const [hover, setHover] = useStateU(false);
+  const [showAbove, setShowAbove] = useStateU(false);
+  const cellRef = useRefU(null);
   const hasNote = !!data.note;
+
+  const handleMouseEnter = () => {
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      setShowAbove(window.innerHeight - rect.bottom < 160);
+    }
+    setHover(true);
+  };
+
   return (
     <div
+      ref={cellRef}
       className={`util-cell ${hasNote ? 'manual' : ''}`}
       style={{
         background: bg,
@@ -324,13 +336,15 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
         position: 'relative',
       }}
       onClick={onClick}
-      onMouseEnter={() => setHover(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setHover(false)}
     >
       <span className="num">{utilizationCellLabel(data)}</span>
       {hover && (data.client || data.note || data.hasValue) && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', left: '50%', transform: 'translateX(-50%)',
+          position: 'absolute',
+          ...(showAbove ? { bottom: 'calc(100% + 6px)', top: 'auto' } : { top: 'calc(100% + 6px)', bottom: 'auto' }),
+          left: '50%', transform: 'translateX(-50%)',
           background: '#191F28',
           border: '1px solid rgba(255,255,255,0.12)',
           color: '#FFFFFF',

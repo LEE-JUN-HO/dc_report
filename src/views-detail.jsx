@@ -97,7 +97,9 @@ function UserDetail({ userId, onBack, onProjectClick }) {
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <span className="small bold" style={{ flex: 1 }}>{client}</span>
                   <span className="tiny num subtle">{s.weeks}주</span>
-                  <span className="small num bold" style={{ marginLeft: 10, minWidth: 40, textAlign: 'right' }}>{s.totalBilling.toFixed(1)}</span>
+                  <span className="small num bold" style={{ marginLeft: 10, minWidth: 40, textAlign: 'right' }}>
+                    {s.totalBilling.toFixed(1)}<span className="tiny subtle" style={{ marginLeft: 2, fontWeight: 400 }}>주</span>
+                  </span>
                 </div>
                 <div style={{ height: 3, background: 'var(--bg-sunken)', borderRadius: 2, marginTop: 4 }}>
                   <div style={{ width: (s.totalBilling / 53 * 100) + '%', height: '100%', background: team.color, borderRadius: 2 }}></div>

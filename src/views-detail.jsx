@@ -106,6 +106,19 @@ function UserDetail({ userId, onBack, onProjectClick }) {
                 </div>
               </div>
             ))}
+            {clientList.length > 0 && (() => {
+              const totalWeeks = clientList.reduce((s, [, v]) => s + v.weeks, 0);
+              const totalBilling = clientList.reduce((s, [, v]) => s + v.totalBilling, 0);
+              return (
+                <div style={{ padding: '8px 0 2px', display: 'flex', alignItems: 'center' }}>
+                  <span className="tiny bold" style={{ flex: 1, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>합계</span>
+                  <span className="tiny num subtle">{totalWeeks}주</span>
+                  <span className="small num bold" style={{ marginLeft: 10, minWidth: 40, textAlign: 'right', color: team.color }}>
+                    {totalBilling.toFixed(1)}<span className="tiny subtle" style={{ marginLeft: 2, fontWeight: 400 }}>주</span>
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         </div>
         <div className="card">

@@ -89,33 +89,36 @@ function App() {
     setOverrideParams({ userId, weekId, current });
     setOverrideOpen(true);
   };
-  const saveOverride = async ({ userId, weekId, value, client, note, clear }) => {
-    let savedRow = null;
-    if (window.APP_DATA.saveUtilization) {
-      try {
-        savedRow = await window.APP_DATA.saveUtilization(
-          userId, weekId,
-          clear ? null : value,
-          clear ? null : (client || null),
-          clear ? null : (note || null),
-        );
-      } catch (e) {
-        console.error('[ResourceHub] 가동률 저장 실패:', e);
-        alert('저장 실패: ' + e.message);
-        throw e;
-      }
-    }
-
+  const saveOverride = async ({ userId, weekId, weekIds, value, client, note, clear }) => {
+    const ids = weekIds ?? [weekId];
     const { UTIL } = window.APP_DATA;
     if (!UTIL[userId]) UTIL[userId] = {};
-    if (clear) {
-      delete UTIL[userId][weekId];
-    } else {
-      UTIL[userId][weekId] = savedRow ? {
-        value: savedRow.value == null ? null : Number(savedRow.value),
-        client: savedRow.client || null,
-        note: savedRow.note || null,
-      } : { value, client, note };
+
+    for (const wid of ids) {
+      let savedRow = null;
+      if (window.APP_DATA.saveUtilization) {
+        try {
+          savedRow = await window.APP_DATA.saveUtilization(
+            userId, wid,
+            clear ? null : value,
+            clear ? null : (client || null),
+            clear ? null : (note || null),
+          );
+        } catch (e) {
+          console.error('[ResourceHub] 가동률 저장 실패:', e);
+          alert('저장 실패: ' + e.message);
+          throw e;
+        }
+      }
+      if (clear) {
+        delete UTIL[userId][wid];
+      } else {
+        UTIL[userId][wid] = savedRow ? {
+          value: savedRow.value == null ? null : Number(savedRow.value),
+          client: savedRow.client || null,
+          note: savedRow.note || null,
+        } : { value, client, note };
+      }
     }
     setDataVersion(v => v + 1);
   };

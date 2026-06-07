@@ -7,10 +7,13 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
   const user = userId && USERS.find(u => u.id === userId);
   const week = weekId && WEEKS.find(w => w.id === weekId);
 
+  const [inputMode, setInputMode] = useStateM('single'); // 'single' | 'range'
   const [value, setValue] = useStateM(current?.value ?? 0);
   const [client, setClient] = useStateM(current?.client || '');
   const [note, setNote] = useStateM(current?.note || '');
-  const [mode, setMode] = useStateM(current?.note && !current?.client ? 'note' : 'work'); // work / note
+  const [mode, setMode] = useStateM(current?.note && !current?.client ? 'note' : 'work');
+  const [rangeStart, setRangeStart] = useStateM(weekId || '');
+  const [rangeEnd, setRangeEnd] = useStateM(weekId || '');
   const [saving, setSaving] = useStateM(false);
 
   React.useEffect(() => {
@@ -19,18 +22,51 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
       setClient(current?.client || '');
       setNote(current?.note || '');
       setMode(current?.note && !current?.client ? 'note' : 'work');
+      setInputMode('single');
+      setRangeStart(weekId || '');
+      setRangeEnd(weekId || '');
       setSaving(false);
     }
   }, [open, userId, weekId]);
 
   if (!open || !user || !week) return null;
 
+  // 기간 모드에서 선택된 주차 목록 계산 (훅 없이 일반 변수로)
+  let rangeWeekIds;
+  if (inputMode !== 'range') {
+    rangeWeekIds = [weekId];
+  } else {
+    const si = WEEKS.findIndex(w => w.id === rangeStart);
+    const ei = WEEKS.findIndex(w => w.id === rangeEnd);
+    if (si < 0 || ei < 0) {
+      rangeWeekIds = [];
+    } else {
+      const from = Math.min(si, ei);
+      const to   = Math.max(si, ei);
+      rangeWeekIds = WEEKS.slice(from, to + 1).map(w => w.id);
+    }
+  }
+
+  let rangeLabel = '';
+  if (rangeWeekIds.length > 0) {
+    const ws = rangeWeekIds.map(id => WEEKS.find(w => w.id === id)).filter(Boolean);
+    rangeLabel = ws.length === 1
+      ? ws[0].label + ' (' + ws[0].range + ')'
+      : ws[0].label + ' ~ ' + ws[ws.length - 1].label + ' · ' + ws.length + '주';
+  }
+
   const save = async () => {
     if (saving) return;
+    if (inputMode === 'range' && rangeWeekIds.length === 0) {
+      alert('기간을 올바르게 선택해 주세요.');
+      return;
+    }
     setSaving(true);
     try {
       await onSave({
-        userId, weekId,
+        userId,
+        weekId,
+        weekIds: inputMode === 'range' ? rangeWeekIds : undefined,
         value: mode === 'note' ? null : value,
         client: mode === 'note' ? null : (client || null),
         note: mode === 'note' ? (note || null) : null,
@@ -40,48 +76,115 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
       setSaving(false);
     }
   };
+
   const clear = async () => {
     if (saving) return;
     setSaving(true);
     try {
-      await onSave({ userId, weekId, value: null, client: null, note: null, clear: true });
+      await onSave({
+        userId,
+        weekId,
+        weekIds: inputMode === 'range' ? rangeWeekIds : undefined,
+        value: null, client: null, note: null, clear: true,
+      });
       onClose();
     } finally {
       setSaving(false);
     }
   };
 
+  const saveLabel = saving
+    ? '저장 중...'
+    : inputMode === 'range' && rangeWeekIds.length > 1
+      ? `${rangeWeekIds.length}주 저장`
+      : '저장';
+
   return (
     <Modal
-      open={open} onClose={onClose} width={500}
+      open={open} onClose={onClose} width={520}
       title="가동률 편집"
       footer={(
         <>
-          {current && !current.empty && <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>비우기</button>}
+          {inputMode === 'single' && current && !current.empty && (
+            <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>비우기</button>
+          )}
+          {inputMode === 'range' && rangeWeekIds.length > 0 && (
+            <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>
+              {rangeWeekIds.length}주 비우기
+            </button>
+          )}
           <div style={{ flex: 1 }}></div>
           <button className="btn btn-sm" onClick={onClose} disabled={saving}>취소</button>
           <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-            <Icon name="check" size={13} /> {saving ? '저장 중...' : '저장'}
+            <Icon name="check" size={13} /> {saveLabel}
           </button>
         </>
       )}
     >
+      {/* 사용자 정보 */}
       <div className="row gap-12" style={{ marginBottom: 16 }}>
         <Avatar name={user.name} userId={user.id} size="md" />
         <div>
           <div className="bold">{user.name}</div>
-          <div className="tiny subtle">{user.team} · {user.level} · {week.label} ({week.range})</div>
+          <div className="tiny subtle">{user.team} · {user.level}</div>
         </div>
       </div>
 
+      {/* 단일/기간 탭 */}
       <Segmented
-        value={mode}
-        onChange={setMode}
+        value={inputMode}
+        onChange={setInputMode}
         options={[
-          { value: 'work', label: '업무 (고객사 + 빌링)' },
-          { value: 'note', label: '부재 (휴가/교육/대기)' },
+          { value: 'single', label: '단일 주 입력' },
+          { value: 'range',  label: '기간 입력' },
         ]}
       />
+
+      {/* 주차 표시 (단일) 또는 기간 선택 (range) */}
+      {inputMode === 'single' ? (
+        <div className="tiny subtle" style={{ marginTop: 8, marginBottom: 4 }}>
+          {week.label} ({week.range})
+        </div>
+      ) : (
+        <div style={{ marginTop: 10, marginBottom: 4, padding: '10px 12px', background: 'var(--bg-sunken)', borderRadius: 8, border: '1px solid var(--border)' }}>
+          <div className="row gap-10" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div className="tiny bold" style={{ color: 'var(--text-muted)', marginBottom: 4 }}>시작 주차</div>
+              <select className="select" style={{ width: '100%' }} value={rangeStart} onChange={e => setRangeStart(e.target.value)}>
+                {WEEKS.map(w => (
+                  <option key={w.id} value={w.id}>{w.label} ({w.range})</option>
+                ))}
+              </select>
+            </div>
+            <span className="tiny subtle" style={{ marginTop: 16 }}>→</span>
+            <div style={{ flex: 1, minWidth: 160 }}>
+              <div className="tiny bold" style={{ color: 'var(--text-muted)', marginBottom: 4 }}>종료 주차</div>
+              <select className="select" style={{ width: '100%' }} value={rangeEnd} onChange={e => setRangeEnd(e.target.value)}>
+                {WEEKS.map(w => (
+                  <option key={w.id} value={w.id}>{w.label} ({w.range})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {rangeWeekIds.length > 0 && (
+            <div className="tiny" style={{ marginTop: 8, color: 'var(--accent)', fontWeight: 600 }}>
+              ✓ {rangeLabel}에 동일하게 적용됩니다
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 업무/부재 탭 */}
+      <div style={{ marginTop: 12 }}>
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'work', label: '업무 (고객사 + 빌링)' },
+            { value: 'note', label: '부재 (휴가/교육/대기)' },
+          ]}
+        />
+      </div>
 
       {mode === 'work' ? (
         <>

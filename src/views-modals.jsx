@@ -408,17 +408,6 @@ function ClientCombobox({ value, onChange }) {
               onMouseEnter={e => e.currentTarget.style.background = BG_H}
               onMouseLeave={e => e.currentTarget.style.background = opt.label === value ? 'var(--info-weak, #EFF6FF)' : BG}
             >
-              {opt.slackChannelId ? (
-                <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4, background: '#4A154B',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <SlackIcon size={11} />
-                </span>
-              ) : (
-                <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4,
-                  background: BG_S, border: '1px solid var(--border, #E5E8EB)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 9, color: 'var(--muted, #6B7684)' }}>A</span>
-              )}
               <span style={{ flex: 1, overflow: 'hidden' }}>
                 {opt.channelName ? (
                   <span>

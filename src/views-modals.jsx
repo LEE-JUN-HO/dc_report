@@ -202,7 +202,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
             {clients.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
                 {clients.map((c, i) => (
-                  <span key={i} style={{
+                  <span key={c} style={{
                     display: 'inline-flex', alignItems: 'center', gap: 5,
                     padding: '3px 10px 3px 10px',
                     background: 'var(--info-weak, #EFF6FF)',
@@ -226,9 +226,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
               value=""
               placeholder={clients.length === 0 ? '채널명 또는 고객사명 검색…' : '+ 고객사 추가'}
               onChange={(val) => {
-                if (val && !clients.includes(val)) {
-                  setClients(prev => [...prev, val]);
-                }
+                if (val) setClients(prev => [...prev, val]);
               }}
               excludes={clients}
             />

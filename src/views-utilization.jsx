@@ -329,8 +329,6 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
   const cellRef = useRefU(null);
   const hasNote = !!data.note;
   const clientList = parseClients(data.client);
-  const hasMultiClient = clientList.length > 1;
-  // 툴팁 포인터 이벤트 활성화 여부 (Slack 링크 클릭 가능해야 할 때)
   const anySlackUrl = clientList.some(c => getSlackUrlForClient(c));
 
   const handleMouseEnter = () => {

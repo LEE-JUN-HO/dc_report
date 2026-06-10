@@ -235,6 +235,13 @@ function ClientCombobox({ value, onChange }) {
   const wrapRef = useRefM(null);
   const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
 
+  // note 필드에서 svName 추출: "[Slack] sv25-xxx" → "sv25-xxx"
+  const extractSvName = (note) => {
+    if (!note) return null;
+    const m = note.match(/\[Slack\]\s*(.+)/i);
+    return m ? m[1].trim() : null;
+  };
+
   // 파이프라인 + 기존 수기 항목 병합
   const allOptions = (() => {
     const { UTIL, PIPELINE } = window.APP_DATA;
@@ -246,19 +253,25 @@ function ClientCombobox({ value, onChange }) {
     Object.values(UTIL).forEach(wm => {
       Object.values(wm).forEach(c => { if (c.client && !pipelineMap[c.client]) extraSet.add(c.client); });
     });
-    const opts = Object.values(pipelineMap).map(p => ({
-      label: p.client,
-      slackChannelId: p.slackChannelId || null,
-      slackUrl: p.slackChannelId ? wsUrl + '/archives/' + p.slackChannelId : null,
-      fromPipeline: true,
-    }));
-    extraSet.forEach(c => opts.push({ label: c, slackChannelId: null, slackUrl: null, fromPipeline: false }));
+    const opts = Object.values(pipelineMap).map(p => {
+      const svName = extractSvName(p.note);
+      return {
+        label: p.client,
+        channelName: svName,          // Slack 채널명 (sv##-xxx)
+        slackChannelId: p.slackChannelId || null,
+        slackUrl: p.slackChannelId ? wsUrl + '/archives/' + p.slackChannelId : null,
+        fromPipeline: true,
+      };
+    });
+    extraSet.forEach(c => opts.push({ label: c, channelName: null, slackChannelId: null, slackUrl: null, fromPipeline: false }));
     return opts;
   })();
 
   const q = query.trim().toLowerCase();
   const filtered = q
-    ? allOptions.filter(o => o.label.toLowerCase().includes(q))
+    ? allOptions.filter(o =>
+        (o.channelName || o.label).toLowerCase().includes(q)
+      )
     : allOptions;
 
   useEffectM(() => {
@@ -309,25 +322,34 @@ function ClientCombobox({ value, onChange }) {
           </a>
         )}
       </div>
-      {open && filtered.length > 0 && (
+      {open && (filtered.length > 0 || (query.trim() && !allOptions.find(o => o.label === query.trim()))) && ReactDOM.createPortal(
         <div style={{
-          position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0,
-          background: 'var(--bg-elev)', border: '1px solid var(--border)',
-          borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
-          zIndex: 9999, maxHeight: 220, overflowY: 'auto',
+          position: 'fixed',
+          top: (() => { const el = wrapRef.current; if (!el) return 0; const r = el.getBoundingClientRect(); return r.bottom + 4; })(),
+          left: (() => { const el = wrapRef.current; if (!el) return 0; return el.getBoundingClientRect().left; })(),
+          width: (() => { const el = wrapRef.current; if (!el) return 300; return el.getBoundingClientRect().width; })(),
+          backgroundColor: 'var(--bg-elev)',
+          backgroundClip: 'padding-box',
+          border: '1px solid var(--border)',
+          borderRadius: 8,
+          boxShadow: '0 8px 32px rgba(0,0,0,0.28)',
+          zIndex: 99999,
+          maxHeight: 240,
+          overflowY: 'auto',
+          isolation: 'isolate',
         }}>
-          {filtered.slice(0, 30).map((opt, i) => (
+          {filtered.slice(0, 40).map((opt, i) => (
             <div
               key={i}
               onMouseDown={() => select(opt)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', cursor: 'pointer', fontSize: 13,
-                borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none',
-                background: opt.label === value ? 'var(--accent-weak)' : 'transparent',
+                borderBottom: '1px solid var(--border)',
+                backgroundColor: opt.label === value ? 'var(--accent-weak)' : 'var(--bg-elev)',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
-              onMouseLeave={e => e.currentTarget.style.background = opt.label === value ? 'var(--accent-weak)' : 'transparent'}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-sunken)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = opt.label === value ? 'var(--accent-weak)' : 'var(--bg-elev)'}
             >
               {opt.slackChannelId ? (
                 <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4, background: '#4A154B',
@@ -336,14 +358,21 @@ function ClientCombobox({ value, onChange }) {
                 </span>
               ) : (
                 <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4,
-                  background: 'var(--bg-sunken)', border: '1px solid var(--border)',
+                  backgroundColor: 'var(--bg-sunken)', border: '1px solid var(--border)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 9, color: 'var(--text-muted)' }}>A</span>
               )}
-              <span style={{ flex: 1 }}>{opt.label}</span>
-              {opt.slackChannelId && (
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}># {opt.slackChannelId}</span>
-              )}
+              <span style={{ flex: 1, overflow: 'hidden' }}>
+                {/* 채널명이 있으면 채널명 주표시, 고객사명은 보조 */}
+                {opt.channelName ? (
+                  <span>
+                    <span style={{ fontWeight: 500 }}>{opt.channelName}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{opt.label}</span>
+                  </span>
+                ) : (
+                  <span>{opt.label}</span>
+                )}
+              </span>
             </div>
           ))}
           {/* 입력값이 기존 목록에 없으면 직접 입력 항목 노출 */}
@@ -354,15 +383,17 @@ function ClientCombobox({ value, onChange }) {
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', cursor: 'pointer', fontSize: 13,
                 color: 'var(--text-muted)', borderTop: '1px solid var(--border)',
+                backgroundColor: 'var(--bg-elev)',
               }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-sunken)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-sunken)'}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bg-elev)'}
             >
               <span style={{ fontSize: 11 }}>＋</span>
               <span>"{query.trim()}" 직접 입력</span>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

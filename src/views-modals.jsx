@@ -232,6 +232,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
 function ClientCombobox({ value, onChange }) {
   const [query, setQuery] = useStateM(value || '');
   const [open, setOpen] = useStateM(false);
+  const [dropRect, setDropRect] = useStateM(null);
   const wrapRef = useRefM(null);
   const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
 
@@ -243,36 +244,85 @@ function ClientCombobox({ value, onChange }) {
   };
 
   // 파이프라인 + 기존 수기 항목 병합
+  // 수기 입력값이 파이프라인 client명 또는 channelName(svName)과 일치하면 채널 항목으로 처리
   const allOptions = (() => {
     const { UTIL, PIPELINE } = window.APP_DATA;
-    const pipelineMap = {};
+    // client명 → pipeline entry
+    const byClient = {};
+    // channelName(svName) → pipeline entry
+    const byChannelName = {};
     PIPELINE.forEach(p => {
-      if (p.client) pipelineMap[p.client] = p;
+      if (p.client) byClient[p.client] = p;
+      const sv = extractSvName(p.note);
+      if (sv) byChannelName[sv.toLowerCase()] = p;
     });
-    const extraSet = new Set();
-    Object.values(UTIL).forEach(wm => {
-      Object.values(wm).forEach(c => { if (c.client && !pipelineMap[c.client]) extraSet.add(c.client); });
-    });
-    const opts = Object.values(pipelineMap).map(p => {
+
+    const opts = Object.values(byClient).map(p => {
       const svName = extractSvName(p.note);
       return {
         label: p.client,
-        channelName: svName,          // Slack 채널명 (sv##-xxx)
+        channelName: svName,
         slackChannelId: p.slackChannelId || null,
         slackUrl: p.slackChannelId ? wsUrl + '/archives/' + p.slackChannelId : null,
         fromPipeline: true,
       };
     });
-    extraSet.forEach(c => opts.push({ label: c, channelName: null, slackChannelId: null, slackUrl: null, fromPipeline: false }));
+
+    // 수기 입력값 중 파이프라인과 겹치지 않는 것만 추가
+    // (client명 일치 OR channelName 일치 모두 제외 — 이미 파이프라인 항목으로 표시됨)
+    const addedLabels = new Set(opts.map(o => o.label));
+    Object.values(UTIL).forEach(wm => {
+      Object.values(wm).forEach(c => {
+        if (!c.client) return;
+        // channelName 일치 → 해당 파이프라인 항목으로 매핑 (중복 추가 방지)
+        const matchedByChannel = byChannelName[c.client.toLowerCase()];
+        if (matchedByChannel && !addedLabels.has(matchedByChannel.client)) {
+          const sv = extractSvName(matchedByChannel.note);
+          opts.push({
+            label: matchedByChannel.client,
+            channelName: sv,
+            slackChannelId: matchedByChannel.slackChannelId || null,
+            slackUrl: matchedByChannel.slackChannelId ? wsUrl + '/archives/' + matchedByChannel.slackChannelId : null,
+            fromPipeline: true,
+          });
+          addedLabels.add(matchedByChannel.client);
+          return;
+        }
+        // 파이프라인 client명과도 일치하지 않으면 수기 항목으로 추가
+        if (!addedLabels.has(c.client) && !byClient[c.client]) {
+          opts.push({ label: c.client, channelName: null, slackChannelId: null, slackUrl: null, fromPipeline: false });
+          addedLabels.add(c.client);
+        }
+      });
+    });
     return opts;
   })();
 
   const q = query.trim().toLowerCase();
   const filtered = q
     ? allOptions.filter(o =>
-        (o.channelName || o.label).toLowerCase().includes(q)
+        (o.channelName || '').toLowerCase().includes(q) ||
+        o.label.toLowerCase().includes(q)
       )
     : allOptions;
+
+  // 드롭다운 위치를 open 시 및 입력값 변경 시마다 측정
+  useEffectM(() => {
+    if (!open) return;
+    const update = () => {
+      if (wrapRef.current) {
+        const r = wrapRef.current.getBoundingClientRect();
+        setDropRect({ top: r.bottom + 4, left: r.left, width: r.width });
+      }
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open]);
 
   useEffectM(() => {
     setQuery(value || '');
@@ -289,7 +339,7 @@ function ClientCombobox({ value, onChange }) {
 
   const select = (opt) => {
     onChange(opt.label);
-    setQuery(opt.label);
+    setQuery(opt.channelName || opt.label);
     setOpen(false);
   };
 
@@ -299,7 +349,16 @@ function ClientCombobox({ value, onChange }) {
     setOpen(true);
   };
 
-  const selectedOpt = allOptions.find(o => o.label === value);
+  // 현재 value와 일치하는 옵션 (client명 또는 channelName으로 매칭)
+  const selectedOpt = allOptions.find(o => o.label === value) ||
+    allOptions.find(o => o.channelName && o.channelName.toLowerCase() === (value || '').toLowerCase());
+
+  // 실제 정의된 색상 토큰 사용 (--bg-elev 은 이 프로젝트에 미정의)
+  const BG   = 'var(--canvas, #ffffff)';
+  const BG_H = 'var(--canvas-alt, #F9FAFB)';
+  const BG_S = 'var(--surface-2, #F2F4F6)';
+
+  const showDropdown = open && dropRect && (filtered.length > 0 || (query.trim() && !allOptions.find(o => o.label === query.trim())));
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
@@ -322,21 +381,19 @@ function ClientCombobox({ value, onChange }) {
           </a>
         )}
       </div>
-      {open && (filtered.length > 0 || (query.trim() && !allOptions.find(o => o.label === query.trim()))) && ReactDOM.createPortal(
+      {showDropdown && ReactDOM.createPortal(
         <div style={{
           position: 'fixed',
-          top: (() => { const el = wrapRef.current; if (!el) return 0; const r = el.getBoundingClientRect(); return r.bottom + 4; })(),
-          left: (() => { const el = wrapRef.current; if (!el) return 0; return el.getBoundingClientRect().left; })(),
-          width: (() => { const el = wrapRef.current; if (!el) return 300; return el.getBoundingClientRect().width; })(),
-          backgroundColor: 'var(--bg-elev)',
-          backgroundClip: 'padding-box',
-          border: '1px solid var(--border)',
+          top: dropRect.top,
+          left: dropRect.left,
+          width: dropRect.width,
+          background: BG,
+          border: '1px solid var(--border, #E5E8EB)',
           borderRadius: 8,
-          boxShadow: '0 8px 32px rgba(0,0,0,0.28)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
           zIndex: 99999,
           maxHeight: 240,
           overflowY: 'auto',
-          isolation: 'isolate',
         }}>
           {filtered.slice(0, 40).map((opt, i) => (
             <div
@@ -345,11 +402,11 @@ function ClientCombobox({ value, onChange }) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', cursor: 'pointer', fontSize: 13,
-                borderBottom: '1px solid var(--border)',
-                backgroundColor: opt.label === value ? 'var(--accent-weak)' : 'var(--bg-elev)',
+                borderBottom: '1px solid var(--border, #E5E8EB)',
+                background: opt.label === value ? 'var(--info-weak, #EFF6FF)' : BG,
               }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-sunken)'}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = opt.label === value ? 'var(--accent-weak)' : 'var(--bg-elev)'}
+              onMouseEnter={e => e.currentTarget.style.background = BG_H}
+              onMouseLeave={e => e.currentTarget.style.background = opt.label === value ? 'var(--info-weak, #EFF6FF)' : BG}
             >
               {opt.slackChannelId ? (
                 <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4, background: '#4A154B',
@@ -358,16 +415,15 @@ function ClientCombobox({ value, onChange }) {
                 </span>
               ) : (
                 <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 4,
-                  backgroundColor: 'var(--bg-sunken)', border: '1px solid var(--border)',
+                  background: BG_S, border: '1px solid var(--border, #E5E8EB)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 9, color: 'var(--text-muted)' }}>A</span>
+                  fontSize: 9, color: 'var(--muted, #6B7684)' }}>A</span>
               )}
               <span style={{ flex: 1, overflow: 'hidden' }}>
-                {/* 채널명이 있으면 채널명 주표시, 고객사명은 보조 */}
                 {opt.channelName ? (
                   <span>
                     <span style={{ fontWeight: 500 }}>{opt.channelName}</span>
-                    <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 6 }}>{opt.label}</span>
+                    <span style={{ fontSize: 11, color: 'var(--muted, #6B7684)', marginLeft: 6 }}>{opt.label}</span>
                   </span>
                 ) : (
                   <span>{opt.label}</span>
@@ -382,11 +438,11 @@ function ClientCombobox({ value, onChange }) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', cursor: 'pointer', fontSize: 13,
-                color: 'var(--text-muted)', borderTop: '1px solid var(--border)',
-                backgroundColor: 'var(--bg-elev)',
+                color: 'var(--muted, #6B7684)', borderTop: '1px solid var(--border, #E5E8EB)',
+                background: BG,
               }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--bg-sunken)'}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--bg-elev)'}
+              onMouseEnter={e => e.currentTarget.style.background = BG_H}
+              onMouseLeave={e => e.currentTarget.style.background = BG}
             >
               <span style={{ fontSize: 11 }}>＋</span>
               <span>"{query.trim()}" 직접 입력</span>

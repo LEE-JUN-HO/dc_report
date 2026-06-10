@@ -350,14 +350,7 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       onMouseLeave={() => setHover(false)}
     >
       <span className="num">{utilizationCellLabel(data)}</span>
-      {slackUrl && !hover && (
-        <span style={{
-          position: 'absolute', bottom: 2, right: 2,
-          width: 8, height: 8, borderRadius: 2,
-          background: '#4A154B', opacity: 0.85,
-          pointerEvents: 'none',
-        }} />
-      )}
+
       {hover && (data.client || data.note || data.hasValue) && (
         <div style={{
           position: 'absolute',

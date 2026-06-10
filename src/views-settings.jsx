@@ -1,5 +1,5 @@
 // 설정 — 팀/인원 관리
-const { useState: useStateS, useEffect: useEffectS } = React;
+const { useState: useStateS, useEffect: useEffectS, useMemo: useMemoS } = React;
 
 function SettingsView(props) {
   const [tab, setTab] = useStateS('teams');
@@ -11,12 +11,14 @@ function SettingsView(props) {
         <button className={tab === 'users'    ? 'active' : ''} onClick={() => setTab('users')}>인원 관리</button>
         <button className={tab === 'partners' ? 'active' : ''} onClick={() => setTab('partners')}>외주 관리</button>
         {isAdmin && <button className={tab === 'accounts' ? 'active' : ''} onClick={() => setTab('accounts')}>계정 관리</button>}
+        {isAdmin && <button className={tab === 'access'   ? 'active' : ''} onClick={() => setTab('access')}>접속자 현황</button>}
         <button className={tab === 'sync'     ? 'active' : ''} onClick={() => setTab('sync')}>데이터 동기화</button>
       </div>
       {tab === 'teams'    && <TeamsSettings   {...props} />}
       {tab === 'users'    && <UsersSettings   {...props} />}
       {tab === 'partners' && <PartnersSettings {...props} />}
       {tab === 'accounts' && isAdmin && <UserApprovalSettings />}
+      {tab === 'access'   && isAdmin && <AccessLogSettings />}
       {tab === 'sync'     && <SyncSettings />}
     </div>
   );
@@ -1174,6 +1176,226 @@ function UserApprovalSettings() {
                 </tr>
               );
             })}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// ===== 접속자 현황 탭 (관리자 전용) =====
+function AccessLogSettings() {
+  const [logs, setLogs]         = useStateS([]);
+  const [loading, setLoading]   = useStateS(true);
+  const [error, setError]       = useStateS('');
+  const [viewMode, setViewMode] = useStateS('daily');   // 'daily' | 'user'
+  const [page, setPage]         = useStateS(0);
+  const PAGE_SIZE = 30;
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const client = window.__SUPABASE_AUTH_CLIENT__;
+      if (!client) throw new Error('Supabase 클라이언트 없음');
+      const { data, error: err } = await client
+        .from('access_logs')
+        .select('id, user_id, email, name, accessed_at')
+        .order('accessed_at', { ascending: false })
+        .limit(5000);
+      if (err) throw err;
+      setLogs(data || []);
+    } catch (e) {
+      setError('접속 로그 로드 실패: ' + e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffectS(() => { load(); }, []);
+
+  // 일별 집계
+  const dailyRows = useMemoS(() => {
+    const map = {};
+    for (const l of logs) {
+      const day = l.accessed_at?.slice(0, 10) || '';
+      if (!map[day]) map[day] = { day, users: new Set(), count: 0, list: [] };
+      map[day].users.add(l.user_id);
+      map[day].count++;
+      map[day].list.push(l);
+    }
+    return Object.values(map).sort((a, b) => b.day.localeCompare(a.day));
+  }, [logs]);
+
+  // 사용자별 집계
+  const userRows = useMemoS(() => {
+    const map = {};
+    for (const l of logs) {
+      const key = l.user_id;
+      if (!map[key]) map[key] = { user_id: key, email: l.email, name: l.name, count: 0, lastAt: l.accessed_at, days: new Set() };
+      map[key].count++;
+      map[key].days.add(l.accessed_at?.slice(0, 10));
+      if (l.accessed_at > map[key].lastAt) map[key].lastAt = l.accessed_at;
+    }
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [logs]);
+
+  const fmtDate = (iso) => {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const fmtTime = (iso) => {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+  const fmtDatetime = (iso) => iso ? `${fmtDate(iso)} ${fmtTime(iso)}` : '-';
+
+  // 일별 뷰 — 날짜별로 펼쳐지는 상세 행
+  const [expandedDay, setExpandedDay] = useStateS(null);
+
+  const pagedDaily = dailyRows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const totalPages = Math.ceil(dailyRows.length / PAGE_SIZE);
+
+  const thStyle = { padding: '8px 12px', textAlign: 'left', fontSize: 12, fontWeight: 600,
+    color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' };
+  const tdStyle = { padding: '9px 12px', fontSize: 13, color: 'var(--text)', borderBottom: '1px solid var(--border)' };
+
+  return (
+    <div className="col gap-16">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>접속자 현황</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+            앱 접속 시 자동 기록됩니다. 총 {logs.length.toLocaleString()}건
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div className="segmented" style={{ alignSelf: 'flex-start' }}>
+            <button className={viewMode === 'daily' ? 'active' : ''} onClick={() => { setViewMode('daily'); setPage(0); }}>일별</button>
+            <button className={viewMode === 'user'  ? 'active' : ''} onClick={() => { setViewMode('user');  setPage(0); }}>사용자별</button>
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={load} disabled={loading}
+            style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {loading ? '로딩 중…' : '↺ 새로고침'}
+          </button>
+        </div>
+      </div>
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {loading ? (
+        <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          접속 기록 불러오는 중…
+        </div>
+      ) : logs.length === 0 ? (
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+          아직 접속 기록이 없습니다.<br />
+          <span style={{ fontSize: 11, opacity: 0.7 }}>migration-access-logs.sql을 Supabase에 먼저 실행해주세요.</span>
+        </div>
+      ) : viewMode === 'daily' ? (
+        <>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={thStyle}>날짜</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>접속 횟수</th>
+                <th style={{ ...thStyle, textAlign: 'right' }}>고유 사용자</th>
+                <th style={thStyle}>접속자</th>
+                <th style={{ ...thStyle, width: 32 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedDaily.map(row => {
+                const isExpanded = expandedDay === row.day;
+                const uniqueNames = [...new Set(row.list.map(l => l.name || l.email))];
+                return (
+                  <React.Fragment key={row.day}>
+                    <tr
+                      style={{ cursor: 'pointer', background: isExpanded ? 'var(--bg-sunken)' : undefined }}
+                      onClick={() => setExpandedDay(isExpanded ? null : row.day)}
+                    >
+                      <td style={{ ...tdStyle, fontWeight: 600 }}>{row.day}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{row.count}</td>
+                      <td style={{ ...tdStyle, textAlign: 'right' }}>{row.users.size}</td>
+                      <td style={tdStyle}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {uniqueNames.slice(0, 6).map((n, i) => (
+                            <span key={i} className="badge" style={{ fontSize: 11 }}>{n}</span>
+                          ))}
+                          {uniqueNames.length > 6 && (
+                            <span className="badge" style={{ fontSize: 11, background: 'var(--bg-sunken)' }}>
+                              +{uniqueNames.length - 6}명
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ ...tdStyle, textAlign: 'center', color: 'var(--text-muted)' }}>
+                        {isExpanded ? '▲' : '▼'}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr>
+                        <td colSpan={5} style={{ padding: 0, background: 'var(--bg-sunken)', borderBottom: '1px solid var(--border)' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ ...thStyle, paddingLeft: 32, fontSize: 11 }}>시각</th>
+                                <th style={{ ...thStyle, fontSize: 11 }}>이름</th>
+                                <th style={{ ...thStyle, fontSize: 11 }}>이메일</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {row.list.map(l => (
+                                <tr key={l.id}>
+                                  <td style={{ ...tdStyle, paddingLeft: 32, fontSize: 12, color: 'var(--text-muted)' }}>{fmtTime(l.accessed_at)}</td>
+                                  <td style={{ ...tdStyle, fontSize: 12 }}>{l.name || '-'}</td>
+                                  <td style={{ ...tdStyle, fontSize: 12, color: 'var(--text-muted)' }}>{l.email}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, paddingTop: 4 }}>
+              <button className="btn btn-sm btn-ghost" disabled={page === 0} onClick={() => setPage(p => p - 1)}>이전</button>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>
+                {page + 1} / {totalPages}
+              </span>
+              <button className="btn btn-sm btn-ghost" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>다음</button>
+            </div>
+          )}
+        </>
+      ) : (
+        // 사용자별 뷰
+        <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={thStyle}>이름</th>
+              <th style={thStyle}>이메일</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>총 접속 횟수</th>
+              <th style={{ ...thStyle, textAlign: 'right' }}>접속 일수</th>
+              <th style={thStyle}>마지막 접속</th>
+            </tr>
+          </thead>
+          <tbody>
+            {userRows.map(u => (
+              <tr key={u.user_id}>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>{u.name || '-'}</td>
+                <td style={{ ...tdStyle, color: 'var(--text-muted)' }}>{u.email}</td>
+                <td style={{ ...tdStyle, textAlign: 'right' }}>{u.count}</td>
+                <td style={{ ...tdStyle, textAlign: 'right' }}>{u.days.size}</td>
+                <td style={{ ...tdStyle, color: 'var(--text-muted)', fontSize: 12 }}>{fmtDatetime(u.lastAt)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

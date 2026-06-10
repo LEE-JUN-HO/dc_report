@@ -77,6 +77,12 @@
       }
       window.__RESOURCE_HUB_AUTH__ = { status, user: session.user, profile };
       window.dispatchEvent(new CustomEvent('auth-state-changed'));
+      // 접속 로그 기록 (오류 발생해도 앱 흐름에 영향 없음)
+      client.from('access_logs').insert({
+        user_id: session.user.id,
+        email: session.user.email,
+        name: profile?.name || session.user.email,
+      }).then(() => {}).catch(() => {});
     } else {
       // profiles 테이블 없음 → 인증 우회 (하위 호환)
       window.__RESOURCE_HUB_AUTH__ = { status: 'bypass', user: null, profile: null };

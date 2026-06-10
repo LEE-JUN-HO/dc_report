@@ -9,7 +9,8 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
 
   const [inputMode, setInputMode] = useStateM('single'); // 'single' | 'range'
   const [value, setValue] = useStateM(current?.value ?? 0);
-  const [client, setClient] = useStateM(current?.client || '');
+  // clients: string[] — 저장 시 '|'로 조인, 로드 시 '|'로 분리
+  const [clients, setClients] = useStateM(() => current?.client ? current.client.split('|').map(s => s.trim()).filter(Boolean) : []);
   const [note, setNote] = useStateM(current?.note || '');
   const [mode, setMode] = useStateM(current?.note && !current?.client ? 'note' : 'work');
   const [rangeStart, setRangeStart] = useStateM(weekId || '');
@@ -19,7 +20,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
   React.useEffect(() => {
     if (open) {
       setValue(current?.value ?? 0);
-      setClient(current?.client || '');
+      setClients(current?.client ? current.client.split('|').map(s => s.trim()).filter(Boolean) : []);
       setNote(current?.note || '');
       setMode(current?.note && !current?.client ? 'note' : 'work');
       setInputMode('single');
@@ -68,7 +69,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
         weekId,
         weekIds: inputMode === 'range' ? rangeWeekIds : undefined,
         value: mode === 'note' ? null : value,
-        client: mode === 'note' ? null : (client || null),
+        client: mode === 'note' ? null : (clients.length > 0 ? clients.join('|') : null),
         note: mode === 'note' ? (note || null) : null,
       });
       onClose();
@@ -189,8 +190,46 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
       {mode === 'work' ? (
         <>
           <div className="field" style={{ marginTop: 14 }}>
-            <div className="field-label">고객사</div>
-            <ClientCombobox value={client} onChange={setClient} />
+            <div className="field-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>고객사</span>
+              {clients.length > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--muted, #6B7684)', fontWeight: 400 }}>
+                  {clients.length}개 선택됨
+                </span>
+              )}
+            </div>
+            {/* 선택된 고객사 칩 목록 */}
+            {clients.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                {clients.map((c, i) => (
+                  <span key={c} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                    padding: '3px 10px 3px 10px',
+                    background: 'var(--info-weak, #EFF6FF)',
+                    border: '1px solid var(--info, #3182F6)',
+                    borderRadius: 9999, fontSize: 12, color: 'var(--ink, #191F28)',
+                  }}>
+                    {c}
+                    <button
+                      onClick={() => setClients(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer',
+                        padding: 0, lineHeight: 1, color: 'var(--muted, #6B7684)',
+                        fontSize: 14, display: 'flex', alignItems: 'center' }}
+                      title="제거"
+                    >×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* 고객사 추가 콤보박스 */}
+            <ClientCombobox
+              value=""
+              placeholder={clients.length === 0 ? '채널명 또는 고객사명 검색…' : '+ 고객사 추가'}
+              onChange={(val) => {
+                if (val) setClients(prev => [...prev, val]);
+              }}
+              excludes={clients}
+            />
           </div>
           <div className="field">
             <div className="field-label">빌링 비율</div>
@@ -229,7 +268,7 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
 }
 
 // 고객사 검색형 콤보박스 — 파이프라인 채널 우선, 자유 입력 허용
-function ClientCombobox({ value, onChange }) {
+function ClientCombobox({ value, onChange, placeholder, excludes = [] }) {
   const [query, setQuery] = useStateM(value || '');
   const [open, setOpen] = useStateM(false);
   const [dropRect, setDropRect] = useStateM(null);
@@ -299,12 +338,13 @@ function ClientCombobox({ value, onChange }) {
   })();
 
   const q = query.trim().toLowerCase();
-  const filtered = q
+  const filtered = (q
     ? allOptions.filter(o =>
         (o.channelName || '').toLowerCase().includes(q) ||
         o.label.toLowerCase().includes(q)
       )
-    : allOptions;
+    : allOptions
+  ).filter(o => !excludes.includes(o.label));
 
   // 드롭다운 위치를 open 시 및 입력값 변경 시마다 측정
   useEffectM(() => {
@@ -339,7 +379,7 @@ function ClientCombobox({ value, onChange }) {
 
   const select = (opt) => {
     onChange(opt.label);
-    setQuery(opt.channelName || opt.label);
+    setQuery('');   // 선택 후 입력창 초기화 (칩 추가 방식)
     setOpen(false);
   };
 
@@ -348,6 +388,9 @@ function ClientCombobox({ value, onChange }) {
     onChange(e.target.value);
     setOpen(true);
   };
+
+  // placeholder prop 반영
+  const inputPlaceholder = placeholder || '채널명 또는 고객사명 검색…';
 
   // 현재 value와 일치하는 옵션 (client명 또는 channelName으로 매칭)
   const selectedOpt = allOptions.find(o => o.label === value) ||
@@ -368,7 +411,7 @@ function ClientCombobox({ value, onChange }) {
           value={query}
           onChange={handleInput}
           onFocus={() => setOpen(true)}
-          placeholder="채널명 또는 고객사명 검색…"
+          placeholder={inputPlaceholder}
           autoComplete="off"
           style={{ flex: 1 }}
         />
@@ -420,10 +463,10 @@ function ClientCombobox({ value, onChange }) {
               </span>
             </div>
           ))}
-          {/* 입력값이 기존 목록에 없으면 직접 입력 항목 노출 */}
-          {query.trim() && !allOptions.find(o => o.label === query.trim()) && (
+          {/* 입력값이 기존 목록에 없고 excludes에도 없으면 직접 입력 항목 노출 */}
+          {query.trim() && !allOptions.find(o => o.label === query.trim()) && !excludes.includes(query.trim()) && (
             <div
-              onMouseDown={() => { onChange(query.trim()); setOpen(false); }}
+              onMouseDown={() => { onChange(query.trim()); setQuery(''); setOpen(false); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '8px 12px', cursor: 'pointer', fontSize: 13,

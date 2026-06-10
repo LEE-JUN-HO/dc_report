@@ -1,6 +1,22 @@
 // 셀 편집 모달 + 신규 프로젝트 모달
 const { useState: useStateM, useRef: useRefM, useEffect: useEffectM } = React;
 
+// 고객사명으로 Slack URL 조회 (파이프라인 기준)
+function getSlackUrlForClientM(clientName) {
+  if (!clientName) return null;
+  const { PIPELINE } = window.APP_DATA;
+  const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
+  const p = PIPELINE.find(p => p.client === clientName);
+  if (p?.slackChannelId) return wsUrl + '/archives/' + p.slackChannelId;
+  // svName으로도 조회
+  const svMatch = PIPELINE.find(p => {
+    const m = (p.note || '').match(/\[Slack\]\s*(.+)/i);
+    return m && m[1].trim().toLowerCase() === clientName.toLowerCase();
+  });
+  if (svMatch?.slackChannelId) return wsUrl + '/archives/' + svMatch.slackChannelId;
+  return null;
+}
+
 // ===== 가동률 셀 편집 모달 =====
 function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
   const { USERS, WEEKS } = window.APP_DATA;
@@ -201,24 +217,37 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
             {/* 선택된 고객사 칩 목록 */}
             {clients.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-                {clients.map((c, i) => (
-                  <span key={c} style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 5,
-                    padding: '3px 10px 3px 10px',
-                    background: 'var(--info-weak, #EFF6FF)',
-                    border: '1px solid var(--info, #3182F6)',
-                    borderRadius: 9999, fontSize: 12, color: 'var(--ink, #191F28)',
-                  }}>
-                    {c}
-                    <button
-                      onClick={() => setClients(prev => prev.filter((_, j) => j !== i))}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer',
-                        padding: 0, lineHeight: 1, color: 'var(--muted, #6B7684)',
-                        fontSize: 14, display: 'flex', alignItems: 'center' }}
-                      title="제거"
-                    >×</button>
-                  </span>
-                ))}
+                {clients.map((c, i) => {
+                  const slackUrl = getSlackUrlForClientM(c);
+                  return (
+                    <span key={c} style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 5,
+                      padding: '3px 8px 3px 10px',
+                      background: 'var(--info-weak, #EFF6FF)',
+                      border: '1px solid var(--info, #3182F6)',
+                      borderRadius: 9999, fontSize: 12, color: 'var(--ink, #191F28)',
+                    }}>
+                      {c}
+                      {slackUrl && (
+                        <a href={slackUrl} target="_blank" rel="noopener noreferrer"
+                          title="Slack 채널 열기"
+                          onClick={e => e.stopPropagation()}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 16, height: 16, borderRadius: 3, background: '#4A154B',
+                            textDecoration: 'none', flexShrink: 0 }}>
+                          <SlackIcon size={10} />
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setClients(prev => prev.filter((_, j) => j !== i))}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer',
+                          padding: 0, lineHeight: 1, color: 'var(--muted, #6B7684)',
+                          fontSize: 14, display: 'flex', alignItems: 'center' }}
+                        title="제거"
+                      >×</button>
+                    </span>
+                  );
+                })}
               </div>
             )}
             {/* 고객사 추가 콤보박스 */}
@@ -391,9 +420,10 @@ function ClientCombobox({ value, onChange, placeholder, excludes = [] }) {
   // placeholder prop 반영
   const inputPlaceholder = placeholder || '채널명 또는 고객사명 검색…';
 
-  // 현재 value와 일치하는 옵션 (client명 또는 channelName으로 매칭)
-  const selectedOpt = allOptions.find(o => o.label === value) ||
-    allOptions.find(o => o.channelName && o.channelName.toLowerCase() === (value || '').toLowerCase());
+  // 검색어 또는 value와 일치하는 옵션 (칩 추가 모드에서 query로 매칭)
+  const _matchStr = (value || query).trim().toLowerCase();
+  const selectedOpt = allOptions.find(o => o.label.toLowerCase() === _matchStr) ||
+    allOptions.find(o => o.channelName && o.channelName.toLowerCase() === _matchStr);
 
   // 실제 정의된 색상 토큰 사용 (--bg-elev 은 이 프로젝트에 미정의)
   const BG   = 'var(--canvas, #ffffff)';

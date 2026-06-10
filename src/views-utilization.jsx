@@ -1,5 +1,5 @@
 // 주간 가동률 표 — 실제 데이터 버전
-const { useState: useStateU, useMemo: useMemoU, useRef: useRefU } = React;
+const { useState: useStateU, useMemo: useMemoU, useRef: useRefU, useEffect: useEffectU } = React;
 
 const ZERO_BILLING_WORK_COLOR = '#EF3226';
 const ZERO_BILLING_WORK_BG = '#FEE2E2';
@@ -587,43 +587,63 @@ function SummaryBanner({ stats, currentWeek, kpiTarget }) {
 
 function UnderBadge({ count, users }) {
   const [open, setOpen] = useStateU(false);
-  return (
-    <span
-      className="badge"
-      style={{ background: 'var(--warn-weak)', color: 'var(--warn)', cursor: 'pointer', position: 'relative' }}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-    >
-      저활용 {count}명
-      {open && (
-        <span style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-          background: '#191F28', color: 'white',
-          borderRadius: 8, padding: '10px 14px',
-          fontSize: 12, fontWeight: 400, lineHeight: 1.7,
-          whiteSpace: 'nowrap', zIndex: 200,
-          boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-          minWidth: 200,
-          pointerEvents: 'none',
-        }}>
-          <span style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: '#F5A623' }}>
-            저활용 기준
-          </span>
-          <span style={{ display: 'block', color: '#8B95A1', marginBottom: 8, fontSize: 11 }}>
-            이번 주 가동률 50% 미만<br />
-            (무상투입·부재 제외)
-          </span>
-          {users.length === 0 ? (
-            <span style={{ color: '#8B95A1' }}>해당 없음</span>
-          ) : users.map((item, i) => (
-            <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '2px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
-              <span>{item.user.name}</span>
-              <span style={{ color: '#F5A623', fontWeight: 600 }}>{(item.value * 100).toFixed(0)}%</span>
-            </span>
-          ))}
+  const [pos, setPos] = useStateU({ top: 0, left: 0 });
+  const badgeRef = useRefU(null);
+
+  function handleMouseEnter() {
+    if (badgeRef.current) {
+      const rect = badgeRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + window.scrollY + 6, left: rect.right + window.scrollX });
+    }
+    setOpen(true);
+  }
+
+  const tooltip = open && ReactDOM.createPortal(
+    <span style={{
+      position: 'absolute',
+      top: pos.top,
+      left: pos.left,
+      transform: 'translateX(-100%)',
+      background: '#191F28', color: 'white',
+      borderRadius: 8, padding: '10px 14px',
+      fontSize: 12, fontWeight: 400, lineHeight: 1.7,
+      whiteSpace: 'nowrap', zIndex: 99999,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+      minWidth: 200,
+      pointerEvents: 'none',
+    }}>
+      <span style={{ display: 'block', fontWeight: 700, marginBottom: 6, color: '#F5A623' }}>
+        저활용 기준
+      </span>
+      <span style={{ display: 'block', color: '#8B95A1', marginBottom: 8, fontSize: 11 }}>
+        이번 주 가동률 50% 미만<br />
+        (무상투입·부재 제외)
+      </span>
+      {users.length === 0 ? (
+        <span style={{ color: '#8B95A1' }}>해당 없음</span>
+      ) : users.map((item, i) => (
+        <span key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '2px 0', borderTop: i > 0 ? '1px solid rgba(255,255,255,0.08)' : 'none' }}>
+          <span>{item.user.name}</span>
+          <span style={{ color: '#F5A623', fontWeight: 600 }}>{(item.value * 100).toFixed(0)}%</span>
         </span>
-      )}
-    </span>
+      ))}
+    </span>,
+    document.body
+  );
+
+  return (
+    <>
+      <span
+        ref={badgeRef}
+        className="badge"
+        style={{ background: 'var(--warn-weak)', color: 'var(--warn)', cursor: 'pointer' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={() => setOpen(false)}
+      >
+        저활용 {count}명
+      </span>
+      {tooltip}
+    </>
   );
 }
 

@@ -308,11 +308,21 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
   );
 }
 
+function getSlackUrlForClient(clientName) {
+  if (!clientName) return null;
+  const { PIPELINE } = window.APP_DATA;
+  const match = PIPELINE.find(p => p.client === clientName && p.slackChannelId);
+  if (!match) return null;
+  const wsUrl = localStorage.getItem('SLACK_WORKSPACE_URL') || 'https://bigxdata-official.slack.com';
+  return wsUrl + '/archives/' + match.slackChannelId;
+}
+
 function UtilCell({ data, bg, isCurrent, onClick }) {
   const [hover, setHover] = useStateU(false);
   const [showAbove, setShowAbove] = useStateU(false);
   const cellRef = useRefU(null);
   const hasNote = !!data.note;
+  const slackUrl = getSlackUrlForClient(data.client);
 
   const handleMouseEnter = () => {
     if (cellRef.current) {
@@ -340,6 +350,14 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
       onMouseLeave={() => setHover(false)}
     >
       <span className="num">{utilizationCellLabel(data)}</span>
+      {slackUrl && !hover && (
+        <span style={{
+          position: 'absolute', bottom: 2, right: 2,
+          width: 8, height: 8, borderRadius: 2,
+          background: '#4A154B', opacity: 0.85,
+          pointerEvents: 'none',
+        }} />
+      )}
       {hover && (data.client || data.note || data.hasValue) && (
         <div style={{
           position: 'absolute',
@@ -356,13 +374,26 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
           whiteSpace: 'nowrap',
           zIndex: 200,
           boxShadow: '0 6px 20px rgba(0,0,0,0.35)',
-          pointerEvents: 'none',
+          pointerEvents: slackUrl ? 'auto' : 'none',
           minWidth: 140,
         }}>
           {data.client && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}>
               <span style={{ color: '#A8B4C0' }}>고객사</span>
-              <span style={{ fontWeight: 600, color: '#FFFFFF' }}>{data.client}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontWeight: 600, color: '#FFFFFF' }}>{data.client}</span>
+                {slackUrl && (
+                  <a href={slackUrl} target="_blank" rel="noopener noreferrer"
+                    title="Slack 채널 열기"
+                    style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      width: 18, height: 18, borderRadius: 4, background: '#4A154B', textDecoration: 'none', flexShrink: 0 }}
+                    onClick={e => e.stopPropagation()}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+                    </svg>
+                  </a>
+                )}
+              </span>
             </div>
           )}
           {data.hasValue && (

@@ -85,8 +85,8 @@ function App() {
     }
   };
 
-  const openOverride = (userId, weekId, current) => {
-    setOverrideParams({ userId, weekId, current });
+  const openOverride = (userId, weekId, current, readOnly = false) => {
+    setOverrideParams({ userId, weekId, current, readOnly });
     setOverrideOpen(true);
   };
   const saveOverride = async ({ userId, weekId, weekIds, value, client, note, clear }) => {

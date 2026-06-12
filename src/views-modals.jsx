@@ -18,7 +18,7 @@ function getSlackUrlForClientM(clientName) {
 }
 
 // ===== 가동률 셀 편집 모달 =====
-function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
+function OverrideModal({ open, onClose, userId, weekId, current, onSave, readOnly = false }) {
   const { USERS, WEEKS } = window.APP_DATA;
   const user = userId && USERS.find(u => u.id === userId);
   const week = weekId && WEEKS.find(w => w.id === weekId);
@@ -119,22 +119,28 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
   return (
     <Modal
       open={open} onClose={onClose} width={520}
-      title="가동률 편집"
+      title={readOnly ? '가동률 확인' : '가동률 편집'}
       footer={(
         <>
-          {inputMode === 'single' && current && !current.empty && (
+          {!readOnly && inputMode === 'single' && current && !current.empty && (
             <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>비우기</button>
           )}
-          {inputMode === 'range' && rangeWeekIds.length > 0 && (
+          {!readOnly && inputMode === 'range' && rangeWeekIds.length > 0 && (
             <button className="btn btn-sm" style={{ color: 'var(--danger)' }} onClick={clear} disabled={saving}>
               {rangeWeekIds.length}주 비우기
             </button>
           )}
           <div style={{ flex: 1 }}></div>
-          <button className="btn btn-sm" onClick={onClose} disabled={saving}>취소</button>
-          <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
-            <Icon name="check" size={13} /> {saveLabel}
-          </button>
+          {readOnly ? (
+            <button className="btn btn-primary btn-sm" onClick={onClose}>닫기</button>
+          ) : (
+            <>
+              <button className="btn btn-sm" onClick={onClose} disabled={saving}>취소</button>
+              <button className="btn btn-primary btn-sm" onClick={save} disabled={saving}>
+                <Icon name="check" size={13} /> {saveLabel}
+              </button>
+            </>
+          )}
         </>
       )}
     >
@@ -147,18 +153,20 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
         </div>
       </div>
 
-      {/* 단일/기간 탭 */}
-      <Segmented
-        value={inputMode}
-        onChange={setInputMode}
-        options={[
-          { value: 'single', label: '단일 주 입력' },
-          { value: 'range',  label: '기간 입력' },
-        ]}
-      />
+      {/* 단일/기간 탭 — 읽기 전용에서는 숨김 */}
+      {!readOnly && (
+        <Segmented
+          value={inputMode}
+          onChange={setInputMode}
+          options={[
+            { value: 'single', label: '단일 주 입력' },
+            { value: 'range',  label: '기간 입력' },
+          ]}
+        />
+      )}
 
       {/* 주차 표시 (단일) 또는 기간 선택 (range) */}
-      {inputMode === 'single' ? (
+      {(readOnly || inputMode === 'single') ? (
         <div className="tiny subtle" style={{ marginTop: 8, marginBottom: 4 }}>
           {week.label} ({week.range})
         </div>
@@ -191,17 +199,19 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
         </div>
       )}
 
-      {/* 업무/부재 탭 */}
-      <div style={{ marginTop: 12 }}>
-        <Segmented
-          value={mode}
-          onChange={setMode}
-          options={[
-            { value: 'work', label: '업무 (고객사 + 빌링)' },
-            { value: 'note', label: '부재 (휴가/교육/대기)' },
-          ]}
-        />
-      </div>
+      {/* 업무/부재 탭 — 읽기 전용에서는 숨김 */}
+      {!readOnly && (
+        <div style={{ marginTop: 12 }}>
+          <Segmented
+            value={mode}
+            onChange={setMode}
+            options={[
+              { value: 'work', label: '업무 (고객사 + 빌링)' },
+              { value: 'note', label: '부재 (휴가/교육/대기)' },
+            ]}
+          />
+        </div>
+      )}
 
       {mode === 'work' ? (
         <>
@@ -238,58 +248,79 @@ function OverrideModal({ open, onClose, userId, weekId, current, onSave }) {
                           <SlackIcon size={10} />
                         </a>
                       )}
-                      <button
-                        onClick={() => setClients(prev => prev.filter((_, j) => j !== i))}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer',
-                          padding: 0, lineHeight: 1, color: 'var(--muted, #6B7684)',
-                          fontSize: 14, display: 'flex', alignItems: 'center' }}
-                        title="제거"
-                      >×</button>
+                      {!readOnly && (
+                        <button
+                          onClick={() => setClients(prev => prev.filter((_, j) => j !== i))}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                            padding: 0, lineHeight: 1, color: 'var(--muted, #6B7684)',
+                            fontSize: 14, display: 'flex', alignItems: 'center' }}
+                          title="제거"
+                        >×</button>
+                      )}
                     </span>
                   );
                 })}
               </div>
             )}
-            {/* 고객사 추가 콤보박스 */}
-            <ClientCombobox
-              value=""
-              placeholder={clients.length === 0 ? '채널명 또는 고객사명 검색…' : '+ 고객사 추가'}
-              onChange={(val) => {
-                if (val) setClients(prev => [...prev, val]);
-              }}
-              excludes={clients}
-            />
+            {/* 고객사 추가 콤보박스 — 읽기 전용에서는 숨김 */}
+            {!readOnly && (
+              <ClientCombobox
+                value=""
+                placeholder={clients.length === 0 ? '채널명 또는 고객사명 검색…' : '+ 고객사 추가'}
+                onChange={(val) => {
+                  if (val) setClients(prev => [...prev, val]);
+                }}
+                excludes={clients}
+              />
+            )}
+            {readOnly && clients.length === 0 && (
+              <div className="tiny subtle">고객사 없음</div>
+            )}
           </div>
           <div className="field">
             <div className="field-label">빌링 비율</div>
-            <div className="row gap-6">
-              {[0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0].map(v => (
-                <button
-                  key={v}
-                  onClick={() => setValue(v)}
-                  className="btn btn-sm"
-                  style={{
-                    flex: 1,
-                    background: value === v ? heatColor(v) : 'var(--bg-elev)',
-                    color: value === v ? heatTextColor(v) : 'var(--text)',
-                    fontWeight: 600,
-                    border: value === v ? `1px solid ${heatColor(v)}` : '1px solid var(--border)',
-                  }}
-                >{v.toFixed(1)}</button>
-              ))}
-            </div>
-            <div className="field-hint">엑셀과 동일 · 0(미투입) → 1.0(풀)</div>
+            {readOnly ? (
+              <div className="tiny" style={{ fontWeight: 600, color: value === 0 ? 'var(--danger)' : 'var(--accent)' }}>
+                {(value * 100).toFixed(0)}%
+              </div>
+            ) : (
+              <>
+                <div className="row gap-6">
+                  {[0, 0.2, 0.4, 0.5, 0.6, 0.8, 1.0].map(v => (
+                    <button
+                      key={v}
+                      onClick={() => setValue(v)}
+                      className="btn btn-sm"
+                      style={{
+                        flex: 1,
+                        background: value === v ? heatColor(v) : 'var(--bg-elev)',
+                        color: value === v ? heatTextColor(v) : 'var(--text)',
+                        fontWeight: 600,
+                        border: value === v ? `1px solid ${heatColor(v)}` : '1px solid var(--border)',
+                      }}
+                    >{v.toFixed(1)}</button>
+                  ))}
+                </div>
+                <div className="field-hint">엑셀과 동일 · 0(미투입) → 1.0(풀)</div>
+              </>
+            )}
           </div>
         </>
       ) : (
         <div className="field" style={{ marginTop: 14 }}>
           <div className="field-label">사유</div>
-          <div className="row gap-6" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-            {['휴가', '교육', '제안 준비', '대기', '출산휴가', '병가', '구정'].map(preset => (
-              <button key={preset} className="btn btn-sm" onClick={() => setNote(preset)} style={{ fontSize: 11 }}>{preset}</button>
-            ))}
-          </div>
-          <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="직접 입력 — 예: 휴가(~3/23), Snowflake 학습" />
+          {readOnly ? (
+            <div className="tiny" style={{ fontWeight: 600 }}>{note || '—'}</div>
+          ) : (
+            <>
+              <div className="row gap-6" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+                {['휴가', '교육', '제안 준비', '대기', '출산휴가', '병가', '구정'].map(preset => (
+                  <button key={preset} className="btn btn-sm" onClick={() => setNote(preset)} style={{ fontSize: 11 }}>{preset}</button>
+                ))}
+              </div>
+              <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="직접 입력 — 예: 휴가(~3/23), Snowflake 학습" />
+            </>
+          )}
         </div>
       )}
     </Modal>

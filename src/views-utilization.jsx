@@ -227,15 +227,15 @@ function UtilizationView({ onOverride, onSelectUser, dataVersion }) {
         <div className="tiny subtle">총 {visibleUsers.length}명 표시 · 목표 85%</div>
       </div>
 
-      {layout === 'table'   && <UtilTable grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} />}
-      {layout === 'heatmap' && <UtilHeatmap grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} />}
+      {layout === 'table'   && <UtilTable grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} onView={isViewer ? onOverride : null} />}
+      {layout === 'heatmap' && <UtilHeatmap grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} onOverride={isViewer ? null : onOverride} onView={isViewer ? onOverride : null} />}
       {layout === 'gantt'   && <UtilGantt grouped={grouped} weeks={visibleWeeks} onSelectUser={onSelectUser} />}
     </div>
   );
 }
 
 // ===== TABLE =====
-function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
+function UtilTable({ grouped, weeks, onSelectUser, onOverride, onView }) {
   const { computeUtilization, LEVEL_COLORS, isUserInUtilizationBase } = window.APP_DATA;
   const NAME_W = 150;
   const LVL_W  = 56;
@@ -309,7 +309,8 @@ function UtilTable({ grouped, weeks, onSelectUser, onOverride }) {
                 {weeks.map(w => {
                   const u_ = computeUtilization(u.id, w.id);
                   const bg = utilizationCellBg(u_);
-                  return <UtilCell key={w.id} data={u_} bg={bg} isCurrent={w.num - 1 === window.APP_DATA.currentWeekIdx()} onClick={() => onOverride(u.id, w.id, u_)} />;
+                  const handleClick = onOverride ? () => onOverride(u.id, w.id, u_) : onView ? () => onView(u.id, w.id, u_, true) : null;
+                  return <UtilCell key={w.id} data={u_} bg={bg} isCurrent={w.num - 1 === window.APP_DATA.currentWeekIdx()} onClick={handleClick} />;
                 })}
               </div>
             ))}
@@ -432,7 +433,7 @@ function UtilCell({ data, bg, isCurrent, onClick }) {
 }
 
 // ===== HEATMAP =====
-function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride }) {
+function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride, onView }) {
   const { computeUtilization } = window.APP_DATA;
   const NAME_W = 180;
   return (
@@ -463,7 +464,7 @@ function UtilHeatmap({ grouped, weeks, onSelectUser, onOverride }) {
                 {weeks.map(w => {
                   const d = computeUtilization(u.id, w.id);
                   return (
-                    <div key={w.id} onClick={() => onOverride(u.id, w.id, d)} style={{
+                    <div key={w.id} onClick={onOverride ? () => onOverride(u.id, w.id, d) : onView ? () => onView(u.id, w.id, d, true) : undefined} style={{
                       height: 30, margin: '0 2px', borderRadius: 5,
                       background: utilizationCellBg(d),
                       display: 'grid', placeItems: 'center', fontSize: 10, fontWeight: 600,

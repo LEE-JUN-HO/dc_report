@@ -68,6 +68,17 @@
   /* Transition */
   --tr: 0.15s ease;
 
+  /* Alias — app.jsx/common.jsx에서 참조하는 변수 */
+  --bg-elev:      #FFFFFF;   /* 카드, 드롭다운 등 띄워진 표면 */
+  --bg-sunken:    #F2F4F6;   /* 헤더 행, 버튼 배경 등 눌린 표면 */
+  --text:         #191F28;   /* 본문 기본 텍스트 */
+  --text-muted:   #6B7684;   /* 보조 텍스트 */
+  --text-subtle:  #8B95A1;   /* 힌트, 플레이스홀더 */
+  --accent:       #3182F6;   /* 포커스 링, 강조 색 */
+  --accent-strong:#1B64DA;   /* 강조 hover */
+  --accent-weak:  #EFF6FF;   /* 강조 배경 */
+  --shadow-lg:    0 8px 24px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08);
+
   /* Font — Pretendard (한글 최적화) */
   --font: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', '맑은 고딕',
           -apple-system, BlinkMacSystemFont, 'Noto Sans KR', sans-serif;

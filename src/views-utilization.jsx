@@ -6,6 +6,9 @@ const ZERO_BILLING_WORK_BG = '#FEE2E2';
 const ABSENCE_COLOR = '#D97706';
 const ABSENCE_BG = '#FFFBEA';
 const ABSENCE_STRIPE_COLOR = '#FFE501';
+const ABSENCE_OTHER_COLOR = '#2563EB';
+const ABSENCE_OTHER_BG = '#EFF6FF';
+const ABSENCE_OTHER_STRIPE_COLOR = '#93C5FD';
 const UNASSIGNED_BG = '#F8FAFC';
 
 function weekPeriodYear(week) { return week?.periodYear ?? week?.year; }
@@ -21,14 +24,21 @@ function isAbsence(data) {
   return !!data?.note && !data?.client;
 }
 
+function isVacation(data) {
+  return isAbsence(data) && /휴가/.test(data?.note ?? '');
+}
+
 function isUnassigned(data) {
   return !data?.client && !data?.note && Number(data?.value || 0) === 0;
 }
 
 function utilizationCellBg(data) {
   if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_BG;
-  if (isAbsence(data)) {
+  if (isVacation(data)) {
     return `repeating-linear-gradient(135deg, ${ABSENCE_BG} 0 7px, ${ABSENCE_STRIPE_COLOR} 7px 10px, ${ABSENCE_BG} 10px 16px)`;
+  }
+  if (isAbsence(data)) {
+    return `repeating-linear-gradient(135deg, ${ABSENCE_OTHER_BG} 0 7px, ${ABSENCE_OTHER_STRIPE_COLOR} 7px 10px, ${ABSENCE_OTHER_BG} 10px 16px)`;
   }
   if (isUnassigned(data)) return UNASSIGNED_BG;
   return heatColor(data?.value);
@@ -36,7 +46,8 @@ function utilizationCellBg(data) {
 
 function utilizationCellTextColor(data) {
   if (isZeroBillingWork(data)) return ZERO_BILLING_WORK_COLOR;
-  if (isAbsence(data)) return '#713F12';
+  if (isVacation(data)) return '#713F12';
+  if (isAbsence(data)) return ABSENCE_OTHER_COLOR;
   if (isUnassigned(data)) return 'var(--text-subtle)';
   return heatTextColor(data?.value);
 }
@@ -45,7 +56,8 @@ function utilizationCellShadow(data, isCurrent = false) {
   const shadows = [];
   if (isCurrent) shadows.push('inset 0 0 0 1px var(--accent)');
   if (isZeroBillingWork(data)) shadows.push(`inset 3px 0 0 ${ZERO_BILLING_WORK_COLOR}`);
-  if (isAbsence(data)) shadows.push(`inset 0 0 0 1px ${ABSENCE_COLOR}55`);
+  if (isVacation(data)) shadows.push(`inset 0 0 0 1px ${ABSENCE_COLOR}55`);
+  else if (isAbsence(data)) shadows.push(`inset 0 0 0 1px ${ABSENCE_OTHER_COLOR}55`);
   return shadows.length ? shadows.join(', ') : 'none';
 }
 
